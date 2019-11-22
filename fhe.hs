@@ -624,33 +624,22 @@ random_tietze rep sample i =
   
 -- and_operation pq a b = TODO
 -- not_operation pq a b = TODO
-
-main =
-  let k = 1 in
-  fq (k+1) >>= \(p,q,pq) -> sl2_fq_rep_sym (p,q,pq) >>= \sl2_rep ->
-    sample_from_rep_2 k sl2_rep pq >>= \v ->
-    putStrLn $
-    show pq ++ "\n" ++
-    (foldr (\a b -> a ++ "\n" ++ b) "" (map show (fst sl2_rep))) ++ "\n" ++
-    (foldr (\a b -> a ++ "\n" ++ b) "" (map show (snd sl2_rep))) ++ "\n\n" ++
-    show (fst v) ++ "\n" ++
-    show (snd v)
   
--- main =
---   let k = 1 in
---   fq (k+1) >>= \(p,q,pq) -> sl2_fq_rep_sym (p,q,pq) >>= \sl2_rep ->
---   random_tietze sl2_rep (\rep -> sample_from_rep_2 k rep pq) k >>= \(sl2_rep_obfuscated,rev_trace) ->
---   sample_from_rep_2 k sl2_rep_obfuscated pq >>= \v ->
---   let v' = (fst v) in -- simplify_token_expression_fix
---   putStrLn $
---   show sl2_rep ++ "\n" ++
---   show sl2_rep_obfuscated ++ "\n" ++
---   show v' ++ "\n" ++
---   show (snd v) ++ "\n" ++
---   (foldr (\a b -> a ++ "\n" ++ b) "" (map show (reverse rev_trace))) ++ 
---   show (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated v') ++ "\n" ++
---   show (evaluate (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated v') (fst sl2_rep) pq) ++ "\n" ++
---   show (evaluate v' (fst sl2_rep_obfuscated) pq) ++ "\n"
+main =
+  let k = 10 in
+  fq (k+1) >>= \(p,q,pq) -> sl2_fq_rep_sym (p,q,pq) >>= \sl2_rep ->
+  random_tietze sl2_rep (\rep -> sample_from_rep_2 k rep pq) k >>= \(sl2_rep_obfuscated,rev_trace) ->
+  sample_from_rep_2 k sl2_rep_obfuscated pq >>= \v ->
+  let v' = (fst v) in -- simplify_token_expression_fix
+  putStrLn $
+  show sl2_rep ++ "\n" ++
+  show sl2_rep_obfuscated ++ "\n" ++
+  show v' ++ "\n" ++
+  show (snd v) ++ "\n" ++
+  (foldr (\a b -> a ++ "\n" ++ b) "" (map show (reverse rev_trace))) ++ 
+  show (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated v') ++ "\n" ++
+  show (evaluate (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated v') (fst sl2_rep) pq) ++ "\n" ++
+  show (evaluate v' (fst sl2_rep_obfuscated) pq) ++ "\n"
 
   -- rep_randomizer sl2_rep (sample_from_rep sl2_rep pq) 0 >>= \sl2_rep_0 ->
   -- rep_randomizer sl2_rep_0 (sample_from_rep sl2_rep_0 pq) 1 >>= \sl2_rep_1 ->
