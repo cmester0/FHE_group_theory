@@ -131,14 +131,14 @@ simplify_token_expression (MULT (MULT a b) c) =
 
 simplify_token_expression (POW a n) = POW (simplify_token_expression a) n
 simplify_token_expression (MULT a b) =
-  let sa = (simplify_token_expression a) in
-  let sb = (simplify_token_expression b) in
+  let sa = simplify_token_expression a in
+  let sb = simplify_token_expression b in
     if token_eq sa sb
     then POW sa 2
     else MULT sa sb
 
 simplify_token_expression (NAME a) = (NAME a)
-simplify_token_expression a = a -- TODO FILL OUT ALL CASES
+simplify_token_expression IDENTITY = IDENTITY
 
 simplify_token_expression_fix expr =
   let sexpr = (simplify_token_expression expr) in
@@ -239,9 +239,8 @@ rep_by_index 1 (rep,sym) sample_algorithm _ rev_trace =
   let solution = (find_solution_for_generator_token gen sym) in
     if isJust solution
     then
-      let sol = (fromJust solution) in -- simplify_token_expression_fix
+      let sol = (fromJust solution) in 
       let sym' = map (replace_token_by_token gen sol) sym in
-      -- let sym'' = map (simplify_token_expression_fix) sym' in
       return $ ((rep',sym'),REMOVE_GENERATOR gen sol : rev_trace)
     else return $ ((rep,sym),rev_trace)
 -- rep_by_index 2 (rep,sym) sample_algorithm = TODO ADD RELATION
@@ -259,11 +258,9 @@ find_token_index t (h : rep) =
   else find_token_index t rep + 1
 
 calculate_value_from_rev_trace :: [Trace] -> ([Token],[Token]) -> Token -> Token
-calculate_value_from_rev_trace [] _ value = -- simplify_token_expression_fix
-  value
+calculate_value_from_rev_trace [] _ value = value
 calculate_value_from_rev_trace (ADD_GENERATOR gen sol : rev_trace) (rep,sym) value =
   let sym' = map (replace_token_by_token gen sol) sym in
-  -- let sym'' = map (simplify_token_expression_fix) sym' in
   let index = find_token_index gen rep in
   let rep' = (take index rep ++ drop (index+1) rep) in
   calculate_value_from_rev_trace rev_trace (rep',sym') (replace_token_by_token gen sol value)    

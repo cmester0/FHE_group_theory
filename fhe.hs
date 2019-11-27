@@ -83,33 +83,44 @@ decode t ker =
     then 1
     else -1
 
-generate_group_rep k =
-  fq (k+1) >>= \(p1,q1,pq1) -> sl2_fq_rep_sym (p1,q1,pq1) ("u_1","t_1","h2_1","h_1") >>= \sl2_rep_1 ->
-  fq (k+1) >>= \(p2,q2,pq2) -> sl2_fq_rep_sym (p2,q2,pq2) ("u_2","t_2","h2_2","h_2") >>= \sl2_rep_2 ->
-  return (fst sl2_rep_1, snd sl2_rep_1)
+generate_group_rep k s =
+  fq (k+1) >>= \(p,q,pq) -> sl2_fq_rep_sym (p,q,pq) s >>= \sl2_rep ->
+  return (fst sl2_rep, snd sl2_rep)
 
 obfuscate_group :: Integer -> ([Token],[Token]) -> IO (([Token],[Token]),[Trace])
 obfuscate_group k rep =
   random_tietze rep (\rep -> sample_from_rep_2 k rep) k
 
-show_1 pq sl2_rep rev_trace sl2_rep_obfuscated v =
-  show sl2_rep ++ "\n" ++
-  show sl2_rep_obfuscated ++ "\n" ++
-  show (fst v) ++ "\n" ++
-  show (snd v) ++ "\n" ++
-  (foldr (\a b -> a ++ "\n" ++ b) "" (map show (reverse rev_trace))) ++ 
-  show (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated (fst v)) ++ "\n" -- ++f
-  -- show (evaluate (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated (fst v)) (fst sl2_rep) pq) ++ "\n" ++
-  -- show (evaluate (fst v) (fst sl2_rep_obfuscated) pq) ++ "\n"
+construct_group_sampler k =
+  generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \sl2_rep_1 ->
+  generate_group_rep k ("u_2","t_2","h2_2","h_2") >>= \sl2_rep_2 ->
+  let sl2_rep = (fst sl2_rep_1 ++ fst sl2_rep_2, snd sl2_rep_1 ++ snd sl2_rep_2) in
+  obfuscate_group k sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->
+  let phi = (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated) in
+  let psi = (calculate_value_from_rev_trace (reverse rev_trace) sl2_rep) in
+  let sample_G = sample_from_rep_2 k sl2_rep_obfuscated in
+  let sample_K = (sample_from_rep_2 k sl2_rep_2) >>= \x -> return $ psi x in
+  let pi1 = (replace_name_by_token "u_2" IDENTITY) .
+            (replace_name_by_token "t_2" IDENTITY) .
+            (replace_name_by_token "h2_2" IDENTITY) .
+            (replace_name_by_token "h_2" IDENTITY) in
+  let pi1_sim = simplify_token_expression_fix . pi1 . phi in
+  let ker = (token_eq IDENTITY) . pi1_sim in
+  return ((sample_G,sample_K,sl2_rep_obfuscated),(pi1_sim,ker))
 
 main =
   let k = 10 in
-  generate_group_rep k >>= \sl2_rep ->
-  obfuscate_group k sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->
-  let phi = (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated) in
-  let sample_G = sample_from_rep_2 k sl2_rep in
-  let sample_K = sample_from_rep_2 k sl2_rep_obfuscated in
-  sample_G >>= \v ->
-  putStrLn . show $ (v , phi v)
-
+  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(pi1_sim,ker)) ->
+  sample_K >>= \k ->
+  sample_G >>= \g ->
+  putStrLn $
+  show k ++ "\n\n\n" ++
+  show (pi1_sim k) ++ "\n\n\n" ++
+  show (ker k) ++ "\n\n\n\n\n\n" ++
+  show g ++ "\n\n\n" ++
+  show (pi1_sim g) ++ "\n\n\n" ++
+  show (ker g)
+  
+  
+  
   -- putStrLn $ show_1 pq sl2_rep rev_trace sl2_rep_obfuscated v
