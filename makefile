@@ -1,5 +1,5 @@
 run:
-	ghc fhe.hs
+	ghc --make *.hs
 	./fhe
 
 run_group:

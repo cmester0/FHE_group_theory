@@ -1,0 +1,148 @@
+perm_aux :: [Integer] -> Integer -> Integer
+perm_aux (x : xs) n =
+  if x == n
+  then head xs
+  else perm_aux xs n
+perm_aux [] n = n
+
+perm_elem :: [Integer] -> Integer -> Integer
+perm_elem a n = perm_aux (a ++ [head a]) n
+
+perm_elem_l :: [[Integer]] -> Integer -> Integer
+perm_elem_l [[]] n = n
+perm_elem_l b n = (foldr (\c d -> perm_elem c d) n (reverse b))
+
+perm_lookup_aux :: [Integer] -> Integer -> [Integer] -> ([Integer],[Integer])
+perm_lookup_aux a i l =
+  if elem i l
+  then ([],l)
+  else
+      let h = (a !! (fromInteger (i-1))) in
+        -- if isNothing h
+        -- then ([],(i : l))
+        -- else
+        let (res,l') = (perm_lookup_aux a h (i : l)) in
+          (h : res,l')
+
+perm_lookup_ :: [Integer] -> Integer -> [Integer] -> [[Integer]]
+perm_lookup_ a i l =
+  if elem i l
+  then []
+  else
+    let (b,l') = perm_lookup_aux a i l in
+      let l_rem = ((take 5 [1..]) \\ l') in
+        if length l_rem == 0
+        then [b]
+        else [b] ++ perm_lookup_ a (head l_rem) l'
+
+perm_lookup :: [Integer] -> [[Integer]]
+perm_lookup a =
+  filter (\l -> length l /= 0) $ perm_lookup_ a 1 []
+
+perm_standard_aux :: [Integer] -> [Integer] -> [Integer] -> [Integer] -> [Integer]
+perm_standard_aux a [] c d = d ++ c
+perm_standard_aux a b c d =
+  if (length d == 0) || (head b < head d)
+  then perm_standard_aux (a ++ [head b]) (tail b) a b
+  else perm_standard_aux (a ++ [head b]) (tail b) c d
+
+perm_from_two_line pa =
+  map (\b -> perm_standard_aux [] b [] []) $
+  filter (\l -> length l > 1) $
+  perm_lookup pa
+
+perm_prod :: [[Integer]] -> [[Integer]] -> [[Integer]]
+perm_prod a b =
+  perm_from_two_line $
+  take 5 [1..] >>= \i ->
+  return $
+  perm_elem_l a (perm_elem_l b i)
+
+perm_simplify :: [[Integer]] -> [[Integer]]
+perm_simplify a = perm_from_two_line (take 5 [1..] >>= \i -> return $ perm_elem_l a i)
+
+perm_inv :: [[Integer]] -> [[Integer]]
+perm_inv a =
+  perm_from_two_line $
+  (take 5 [1..]) >>= \i ->
+  return $ perm_elem_l (reverse (map reverse a)) (toInteger i)
+
+remove_duplicates :: (Eq a) => [a] -> [a]
+remove_duplicates [] = []
+remove_duplicates l =
+  if elem (head l) (tail l)
+  then remove_duplicates (tail l)
+  else (head l) : remove_duplicates (tail l)
+
+powerset :: [Integer] -> [[Integer]]
+powerset [] = [[]]
+powerset l =
+  let res = [0..(length l-1)] >>= \i -> powerset (take i l ++ drop (i+1) l) in
+    l : (remove_duplicates res)
+
+subsets :: [Integer] -> [[[Integer]]]
+subsets l =
+  remove_duplicates $
+  map (map (\b -> perm_standard_aux [] b [] [])) $
+  let a = filter (\x -> length x /= 0) (powerset l) in
+    foldr (++) [] (map (\c -> map (\b -> (b,c)) a) a) >>= \(x,y) ->
+    if length (x \\ y) == length x && length (y \\ x) == length y
+    then [perm_simplify [x,y]]
+    else []
+
+sn :: Integer -> [[[Integer]]]
+sn n =  
+  remove_duplicates $
+  powerset [1..n] >>= \l ->
+  [l] : subsets l
+
+encode 0 = [[]]
+encode 1 = [[1,2,3]]
+
+decode [[]] = 0
+decode [[1,2,3]] = 1
+
+w_not g = perm_prod (perm_inv g) (encode 1)
+
+w_or_in g1 g2 = perm_prod g1 g2
+
+w_nand_in g1 g2 =
+  perm_prod (perm_inv g1) $
+  perm_prod (perm_inv g2) $
+  perm_prod (encode 1) (encode 1)
+
+w_xor_in g1 g2 =
+  perm_prod (perm_inv g1) g2
+
+w_eq_in g1 g2 =
+  perm_prod (perm_inv g1) $
+  perm_prod g2 (perm_inv (encode 1))
+
+w_out :: [[Integer]] -> [[Integer]]
+w_out g =
+  perm_prod [[1,5],[2,3,4]] $
+  perm_prod g $
+  perm_prod [[2,3,4]] $
+  perm_prod g $
+  perm_prod [[3,4]] $
+  perm_prod g $
+  perm_prod g $
+  perm_prod [[2,3],[4,5]] $
+  perm_prod g $  
+  perm_prod [[2,3,4]] $
+  perm_prod g $
+  perm_prod [[3,4]] $
+  perm_prod g $
+  perm_prod g [[1,4,2,5]]
+
+w_or :: [[Integer]] -> [[Integer]] -> [[Integer]]
+w_or g1 g2 = w_out $ w_or_in g1 g2
+
+w_nand :: [[Integer]] -> [[Integer]] -> [[Integer]]
+w_nand g1 g2 = w_out $ w_nand_in g1 g2
+
+w_xor :: [[Integer]] -> [[Integer]] -> [[Integer]]
+w_xor g1 g2 = w_out $ w_xor_in g1 g2
+
+w_eq :: [[Integer]] -> [[Integer]] -> [[Integer]]
+w_eq g1 g2 = w_out $ w_eq_in g1 g2
