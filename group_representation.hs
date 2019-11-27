@@ -16,7 +16,11 @@ data Token =
   | MULT Token Token
   | POW Token Integer
   | IDENTITY
-  deriving Show
+instance Show Token where
+  show (NAME s) = s
+  show (MULT a b) = show a ++ "*" ++ show b
+  show (POW a n) = "(" ++ show a ++ ")^" ++ "(" ++ show n ++ ")"
+  show (IDENTITY) = "I"
 
 base4 :: Integer -> [Integer]
 base4 m =
@@ -24,7 +28,7 @@ base4 m =
   then [m]
   else mod m 4 : base4 (div m 4)
 
-sl2_fq_rep_sym :: (Integer,Integer,Integer) -> (String,String,String,String) -> IO ([Token],[Token])
+sl2_fq_rep_sym :: (Integer,Integer,Integer) -> (String,String,String,String) -> IO (([Token],[Token]),[[[Integer]]])
 sl2_fq_rep_sym (p,q,pq) (su,st,sh2,sh) =
   find_generator pq p q >>= \j ->
 
@@ -40,6 +44,11 @@ sl2_fq_rep_sym (p,q,pq) (su,st,sh2,sh) =
         in
           foldr (cmm) IDENTITY (cuf ++ [ch2 `cmp` toInteger (length b4)])
   in
+
+  let u = [[1,1],[0,1]] in
+  let t = [[0,1],[-1,0]] in
+  let h2 = [[inverse pq 2,0],[0,2]] in
+  let h = [[inverse pq j,0],[0,j]] in
     
   let cu = NAME su in
   let ct = NAME st in
@@ -62,7 +71,7 @@ sl2_fq_rep_sym (p,q,pq) (su,st,sh2,sh) =
            (cmi ct) `cmm` (cmi ch2) `cmm` ceinvh2 `cmm` (cmi ct) `cmm` (cu `cmp` 2) `cmm` ct `cmm` ceinvh2,
            (cmi ct) `cmm` (cmi ch) `cmm` (e cu (inverse pq j) ch2) `cmm` (cmi ct) `cmm` (e cu j ch2) `cmm` ct `cmm` (e cu (inverse pq j) ch2)] in
   return $
-  (s,r)
+  ((s,r),[u,t,h2,h])
 
 token_eq :: Token -> Token -> Bool
 token_eq (MULT a b) (MULT c d) = token_eq a c && token_eq b d
@@ -79,18 +88,18 @@ lookup_in_list a ((b,c):rest) =
 lookup_in_list _ [] = Nothing
 
 -- TODO?
--- evaluate :: Token -> [(Token,[[Integer]])] -> Integer -> Maybe [[Integer]]
--- evaluate (MULT a b) dict pq =
---   (evaluate a dict pq) >>= \ma ->
---   (evaluate b dict pq) >>= \mb ->
---   return $
---   matrix_mult pq ma mb
--- evaluate (POW a b) dict pq =
---   (evaluate a dict pq) >>= \ma ->
---   return $
---   matrix_pow pq ma b
--- evaluate (IDENTITY) _ _ = Just identity
--- evaluate (NAME s) dict pq = lookup_in_list (NAME s) dict
+evaluate :: [(Token,[[Integer]])] -> Integer -> Token -> Maybe [[Integer]]
+evaluate dict pq (MULT a b) =
+  (evaluate dict pq a) >>= \ma ->
+  (evaluate dict pq b) >>= \mb ->
+  return $
+  matrix_mult pq ma mb
+evaluate dict pq (POW a b) =
+  (evaluate dict pq a) >>= \ma ->
+  return $
+  matrix_pow pq ma b
+evaluate _ _ (IDENTITY) = Just identity
+evaluate dict pq (NAME s) = lookup_in_list (NAME s) dict
   
 -- evaluate (POW a b) dict = 
 
@@ -265,7 +274,19 @@ calculate_value_from_rev_trace (ADD_GENERATOR gen sol : rev_trace) (rep,sym) val
   let rep' = (take index rep ++ drop (index+1) rep) in
   calculate_value_from_rev_trace rev_trace (rep',sym') (replace_token_by_token gen sol value)    
 calculate_value_from_rev_trace (REMOVE_GENERATOR a b : rev_trace) (rep,sym) value =
-  calculate_value_from_rev_trace rev_trace (a : rep, b : sym) (value) -- TODO, (replace_token_by_token b (fst a) value)
+  calculate_value_from_rev_trace rev_trace (a : rep, b : sym) (value)
+
+
+calculate_value_from_trace :: [Trace] -> ([Token],[Token]) -> Token -> Token
+calculate_value_from_trace [] _ value = value
+calculate_value_from_trace (ADD_GENERATOR a b : trace) (rep,sym) value =
+  calculate_value_from_trace trace (a : rep, b : sym) (value)
+calculate_value_from_trace (REMOVE_GENERATOR gen sol : trace) (rep,sym) value =
+  let sym' = map (replace_token_by_token gen sol) sym in
+  let index = find_token_index gen rep in
+  let rep' = (take index rep ++ drop (index+1) rep) in
+  calculate_value_from_trace trace (rep',sym') (replace_token_by_token gen sol value)    
+
 
 
 -- Sample random element using a representation: // TODO: is this correct sampling?
