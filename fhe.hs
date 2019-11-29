@@ -32,7 +32,7 @@ construct_group_sampler k =
   let pi1_sim = simplify_token_expression_fix . pi1 . phi in
   let ker_aux = evaluate (zip [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] matri1) pq1 . pi1_sim in
   let ker = (maybe False (\a -> a == identity)) . ker_aux in
-  return ((sample_G,sample_K,sl2_rep_obfuscated),(pi1_sim,ker),(pq1,pq2,ker_aux,rev_trace))
+  return ((sample_G,sample_K,sl2_rep_obfuscated),(pi1_sim,ker),(pq1,pq2,ker_aux,rev_trace,sl2_rep))
 
    ---------------------------
    -- Encoding and Decoding --
@@ -73,13 +73,13 @@ testEquationSolver =
   "Solution: " ++ show (solve_for_token "a" val) ++ "\n" ++
   "Find generator: " ++ show (find_solution_for_generator "a" [val])
 
-
-main =  
+main =
   let k = 4 in
-  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(pi1_sim,ker),(pq1,pq2,ker_aux,rev_trace)) ->
+  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(pi1_sim,ker),(pq1,pq2,ker_aux,rev_trace,sl2_rep)) ->
   sample_K >>= \k ->
   sample_G >>= \g ->
-  putStrLn $  
+  putStrLn $
+  show (sl2_rep) ++ "\n\n\n" ++
   show (pi1_sim k) ++ "\n\n\n" ++
   show (pq1,pq2) ++ "\n\n\n" ++
   (foldr (\a b -> a ++ "\n" ++ b) "n" (map show rev_trace)) ++ "\n\n\n" ++

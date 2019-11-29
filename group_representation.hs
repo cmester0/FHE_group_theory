@@ -16,11 +16,12 @@ data Token =
   | MULT Token Token
   | POW Token Integer
   | IDENTITY
-instance Show Token where
-  show (NAME s) = s
-  show (MULT a b) = show a ++ "*" ++ "(" ++ show b ++ ")"
-  show (POW a n) = "(" ++ show a ++ ")^" ++ "(" ++ show n ++ ")"
-  show (IDENTITY) = "I"
+  deriving Show
+-- instance Show Token where
+--   show (NAME s) = s
+--   show (MULT a b) = show a ++ "*" ++ "(" ++ show b ++ ")"
+--   show (POW a n) = "(" ++ show a ++ ")^" ++ "(" ++ show n ++ ")"
+--   show (IDENTITY) = "I"
 
 base4 :: Integer -> [Integer]
 base4 m =
@@ -335,7 +336,7 @@ rep_by_index :: Integer -> ([Token],[Token]) -> IO Token -> Integer -> [Trace] -
 rep_by_index 0 (rep,sym) sample_algorithm counter rev_trace =
   sample_algorithm >>= \a ->
   let b = NAME ("gen_" ++ show counter) in
-  return $ ((b : rep, a : sym), ADD_GENERATOR b a : rev_trace)
+  return $ ((b : rep, MULT (POW b (-1)) a : sym), ADD_GENERATOR b a : rev_trace)
 rep_by_index 1 (rep,sym) sample_algorithm _ rev_trace =
   (randomRIO (0,length rep - 1) >>= \i -> return $ (take i rep ++ drop (i+1) rep, rep !! i)) >>= \(rep',gen) ->
   let solution = (find_solution_for_generator_token gen sym) in
