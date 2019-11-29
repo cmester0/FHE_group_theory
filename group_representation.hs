@@ -18,7 +18,7 @@ data Token =
   | IDENTITY
 instance Show Token where
   show (NAME s) = s
-  show (MULT a b) = show a ++ "*" ++ show b
+  show (MULT a b) = show a ++ "*" ++ "(" ++ show b ++ ")"
   show (POW a n) = "(" ++ show a ++ ")^" ++ "(" ++ show n ++ ")"
   show (IDENTITY) = "I"
 
@@ -155,52 +155,146 @@ simplify_token_expression_fix expr =
   then expr
   else simplify_token_expression_fix sexpr
 
--- ORDER OF NAME IN TOKEN
-order_of_name_in_token :: String -> Token -> Integer
-order_of_name_in_token s (MULT a (MULT b c)) =
-  let oa = order_of_name_in_token s a in
-  let ob = order_of_name_in_token s b in
-  let oc = order_of_name_in_token s c in
-    if ob == 0
-    then oa - oc
-    else oa + ob + oc    
-order_of_name_in_token s (MULT a b) = order_of_name_in_token s a + order_of_name_in_token s b
-order_of_name_in_token s (NAME a) =
-  if s == a
-  then 1
-  else 0
-order_of_name_in_token s (IDENTITY) = 0
-order_of_name_in_token s (POW a b) = order_of_name_in_token s a * b
-
--- SIMPLE ORDER OF NAME
-order_of_name_in_token_simple :: String -> Token -> Integer
-order_of_name_in_token_simple s t =
-  order_of_name_in_token s t
+-- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<<
 
 
--- SOLVE FOR TOKEN
-solve_for_token :: String -> Token -> Token -> Token  
-solve_for_token s (MULT a b) rhs =
-  if order_of_name_in_token_simple s b == 0
-  then solve_for_token s a (MULT rhs (POW b (-1)))
-  else
-    if order_of_name_in_token_simple s a == 0
-    then solve_for_token s b (MULT (POW a (-1)) rhs)
-    else
-      let rhs' = solve_for_token s b rhs in
-      solve_for_token s a rhs'
+left_mult_simplify :: Token -> Token
+left_mult_simplify (MULT (MULT a b) c) =
+  let ma = left_mult_simplify a in
+  let mb = left_mult_simplify b in
+  let mc = left_mult_simplify c in
+  MULT ma (MULT mb mc)
+left_mult_simplify (POW a n) =
+  let ma = left_mult_simplify a in
+  POW ma n
+left_mult_simplify IDENTITY = IDENTITY
+left_mult_simplify (NAME s) = NAME s
+left_mult_simplify (MULT a b) =
+  let ma = left_mult_simplify a in
+  let mb = left_mult_simplify b in
+  MULT ma mb
 
-solve_for_token s (POW a 0) rhs = rhs
-solve_for_token s (POW a b) rhs = 
-  if b > 0
-  then
-    solve_for_token s (MULT a (POW a (b-1))) rhs
-  else
-    solve_for_token s (POW a (-b)) (POW rhs (-1))
-    
-solve_for_token s (IDENTITY) rhs = rhs
-solve_for_token s (NAME b) rhs = rhs
+right_mult_simplify :: Token -> Token
+right_mult_simplify (MULT a (MULT b c)) =
+  let ma = right_mult_simplify a in
+  let mb = right_mult_simplify b in
+  let mc = right_mult_simplify c in
+  MULT (MULT ma mb) mc
+right_mult_simplify (POW a n) =
+  let ma = right_mult_simplify a in
+  POW ma n
+right_mult_simplify IDENTITY = IDENTITY
+right_mult_simplify (NAME s) = NAME s
+right_mult_simplify (MULT a b) =
+  let ma = right_mult_simplify a in
+  let mb = right_mult_simplify b in
+  MULT ma mb
 
+unfold_powers :: Token -> Token
+unfold_powers (MULT a b) =
+  let ua = unfold_powers a in
+  let ub = unfold_powers b in
+  MULT ua ub
+unfold_powers (POW a (-1)) = POW (unfold_powers a) (-1)
+unfold_powers (POW a n) | n < 0 = 
+  let ua = unfold_powers a in
+  MULT (POW ua (-1)) (unfold_powers (POW  ua (n+1)))
+unfold_powers (POW a 1) = unfold_powers a
+unfold_powers (POW a n) | n > 0 =   
+  let ua = unfold_powers a in
+  MULT ua (unfold_powers (POW  ua (n-1)))
+unfold_powers (POW a 0) = IDENTITY
+unfold_powers (NAME t) = NAME t
+unfold_powers IDENTITY = IDENTITY
+
+normal_form_left = left_mult_simplify . unfold_powers
+normal_form_right = right_mult_simplify . unfold_powers
+
+reduced :: String -> Token -> Bool
+reduced s (NAME t) = t == s
+reduced s (POW t 1) = reduced s t
+reduced s (POW t (-1)) = reduced s t
+reduced s a = False
+
+collapse :: Token -> Token
+collapse (MULT (NAME a) (NAME b)) =
+  if a == b
+  then POW (NAME a) 2
+  else MULT (NAME a) (NAME b)
+collapse (MULT (POW (NAME a) n) (NAME b)) =
+  if a == b
+  then POW (NAME a) (n+1)
+  else MULT (POW (NAME a) n) (NAME b)
+collapse (MULT (NAME b) (POW (NAME a) n)) =  
+  if a == b
+  then POW (NAME a) (n+1)
+  else MULT (NAME b) (POW (NAME a) n)
+collapse (MULT (POW (NAME a) n) (POW (NAME b) m)) =
+  if a == b
+  then POW (NAME a) (n+m)
+  else MULT (POW (NAME a) n) (POW (NAME b) m)
+collapse (MULT a IDENTITY) = collapse a
+collapse (MULT IDENTITY b) = collapse b
+collapse (MULT a b) = MULT (collapse a) (collapse b)
+collapse (POW a n) = POW (collapse a) n
+collapse (NAME a) = NAME a
+collapse IDENTITY = IDENTITY
+
+collapse_fix a =
+  let ca = collapse a in
+  if token_eq ca a
+  then a
+  else collapse_fix ca
+
+move_left_to_rhs :: String -> Token -> Token -> (Token,Token)
+move_left_to_rhs s (MULT (NAME t) b) rhs =
+  if t == s
+  then (MULT (NAME t) b,rhs)
+  else move_left_to_rhs s b (MULT (POW (NAME t) (-1)) rhs)
+move_left_to_rhs s (NAME t) rhs =
+  if s == t
+  then (NAME t,rhs)
+  else (IDENTITY,rhs)
+move_left_to_rhs s (MULT a b) rhs =
+  let (ra,rhs') = move_left_to_rhs s a rhs in
+  if token_eq ra IDENTITY
+  then move_left_to_rhs s b rhs'
+  else (MULT ra b,rhs')
+move_left_to_rhs s a rhs = (a,rhs)
+
+move_right_to_rhs :: String -> Token -> Token -> (Token,Token)
+move_right_to_rhs s (MULT a (NAME t)) rhs =
+  if t == s
+  then (MULT a (NAME t),rhs)
+  else move_right_to_rhs s a (MULT rhs (POW (NAME t) (-1)))
+move_right_to_rhs s (NAME t) rhs =
+    if s == t
+    then (NAME t,rhs)
+    else (IDENTITY,rhs)
+move_right_to_rhs s (MULT a b) rhs =
+  let (rb,rhs') = move_right_to_rhs s b rhs in
+  if token_eq rb IDENTITY
+  then move_right_to_rhs s a rhs'
+  else (MULT a rb,rhs')
+move_right_to_rhs s a rhs = (a,rhs)
+
+remove_left :: String -> Token -> Token
+remove_left s t = fst $ move_left_to_rhs s t IDENTITY
+
+remove_right :: String -> Token -> Token
+remove_right s t = fst $ move_right_to_rhs s t IDENTITY
+  
+solvable :: String -> Token -> Bool
+solvable s = (reduced s) . collapse_fix . (remove_right s) . normal_form_right . (remove_left s) . normal_form_left
+
+solve_for_token :: String -> Token -> Token
+solve_for_token s t =
+  let (rest,rhs) = move_left_to_rhs s (normal_form_left t) IDENTITY in
+  let (rest',rhs') = move_right_to_rhs s (normal_form_right rest) rhs in
+    collapse_fix $ rhs'
+
+-- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<<
+  
 replace_name_by_token :: String -> Token -> Token -> Token
 replace_name_by_token s a (NAME t) =
   if s == t
@@ -217,9 +311,8 @@ replace_token_by_token (NAME t) a b = replace_name_by_token t a b
   
 find_solution_for_generator :: String -> [Token] -> Maybe Token
 find_solution_for_generator s (h:sym) =
-  let s_h_order = order_of_name_in_token s h in
-  if s_h_order == 1 || s_h_order == -1
-  then Just $ solve_for_token s h IDENTITY
+  if solvable s h
+  then Just $ solve_for_token s h
   else find_solution_for_generator s sym
 find_solution_for_generator s [] = Nothing
 
@@ -287,8 +380,6 @@ calculate_value_from_trace (REMOVE_GENERATOR gen sol : trace) (rep,sym) value =
   let rep' = (take index rep ++ drop (index+1) rep) in
   calculate_value_from_trace trace (rep',sym') (replace_token_by_token gen sol value)    
 
-
-
 -- Sample random element using a representation: // TODO: is this correct sampling?
 sample_from_rep :: ([Token],[Token]) -> Integer -> IO Token
 sample_from_rep (rep,sym) pq =
@@ -308,7 +399,9 @@ sample_from_rep_2 k (rep,sym) =
   let list_value = [0..(length rep - 1)] >>= \i ->
         return $
         randomRIO (0,k) >>= \p ->
-        return $ (POW (rep !! i) p)
+        if p == 0
+        then return $ IDENTITY
+        else return $ (POW (rep !! i) p)
   in
     (sequence list_value) >>= \l ->
     return $
