@@ -147,6 +147,6 @@ testEncodeAnd =
   putStrLn $
   show (decode (ab1,ab2) ker pi)
 
-main = testEncodeDecode
+main = testEncodeNot
 
 -- Conjugate every element in representation by random element.
