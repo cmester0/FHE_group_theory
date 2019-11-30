@@ -1,6 +1,6 @@
 run:
 	ghc --make *.hs
-	./fhe
+	./examples
 
 run_group:
 	ghc coxeter.hs
