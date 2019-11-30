@@ -8,8 +8,17 @@ import PrimeNumbers
 import Group
 import Matrix
 
-fq :: Integer -> IO (Integer, Integer, Integer)
-fq k = randomRIO (1,k) >>= \q -> (large_prime k) >>= \p -> return (p,q,p ^ q)
+-- fq :: Integer -> IO (Integer, Integer, Integer)
+-- fq k =
+--   randomRIO (1,k) >>= \q ->
+--   (large_prime k) >>= \p ->
+--   return (p,q,p ^ q)
+
+-- DON'T USE PRIME POWER
+
+fq :: Integer -> IO (Integer,Integer)
+fq k = large_prime k
+
 
 data Token =
   NAME String
@@ -30,7 +39,7 @@ base4 m =
 
 sl2_fq_rep_sym :: (Integer,Integer,Integer) -> (String,String,String,String) -> IO (([Token],[Token]),[[[Integer]]])
 sl2_fq_rep_sym (p,q,pq) (su,st,sh2,sh) =
-  find_generator pq p q >>= \j ->
+  find_generator pq p q 1 >>= \j ->
 
   let cmm = (\a b -> MULT a b) in
   let cmp = (\a n -> POW a n) in
@@ -55,8 +64,6 @@ sl2_fq_rep_sym (p,q,pq) (su,st,sh2,sh) =
   let ch2 = NAME sh2 in
   let ch = NAME sh in
 
-  let s = [cu,ch2,ch,ct] in  
-
   let ceuj = e cu (j ^ 2) ch2 in 
   let ceinvh2 = e cu (inverse pq 2) ch2 in
   let ceuinvh2 = e cu (inverse pq j) ch2 in
@@ -71,7 +78,7 @@ sl2_fq_rep_sym (p,q,pq) (su,st,sh2,sh) =
            (cmi ct) `cmm` (cmi ch2) `cmm` ceinvh2 `cmm` (cmi ct) `cmm` (cu `cmp` 2) `cmm` ct `cmm` ceinvh2,
            (cmi ct) `cmm` (cmi ch) `cmm` (e cu (inverse pq j) ch2) `cmm` (cmi ct) `cmm` (e cu j ch2) `cmm` ct `cmm` (e cu (inverse pq j) ch2)] in
   return $
-  ((s,r),[u,t,h2,h])
+  (([cu,ct,ch2,ch],r),[u,t,h2,h])
 
 token_eq :: Token -> Token -> Bool
 token_eq (MULT a b) (MULT c d) = token_eq a c && token_eq b d
@@ -87,7 +94,6 @@ lookup_in_list a ((b,c):rest) =
   else lookup_in_list a rest
 lookup_in_list _ [] = Nothing
 
--- TODO?
 evaluate :: [(Token,[[Integer]])] -> Integer -> Token -> Maybe [[Integer]]
 evaluate dict pq (MULT a b) =
   (evaluate dict pq a) >>= \ma ->
@@ -100,63 +106,56 @@ evaluate dict pq (POW a b) =
   matrix_pow pq ma b
 evaluate _ _ (IDENTITY) = Just identity
 evaluate dict pq (NAME s) = lookup_in_list (NAME s) dict
-  
--- evaluate (POW a b) dict = 
-
--- TODO: FIX s t s^-2 has order 3 not 1 !!
 
 -- SIMPLIFY TOKEN EXPRESSION
-simplify_token_expression :: Token -> Token
+-- simplify_token_expression :: Token -> Token
 
-simplify_token_expression (POW a 0) = IDENTITY
-simplify_token_expression (POW IDENTITY n) = IDENTITY
-simplify_token_expression (POW a 1) = simplify_token_expression a
+-- simplify_token_expression (POW a 0) = IDENTITY
+-- simplify_token_expression (POW IDENTITY n) = IDENTITY
+-- simplify_token_expression (POW a 1) = simplify_token_expression a
 
-simplify_token_expression (POW (POW a n) m) =
-  let sa = (simplify_token_expression a) in
-  POW sa (n*m)
+-- simplify_token_expression (POW (POW a n) m) =
+--   let sa = (simplify_token_expression a) in
+--   POW sa (n*m)
   
-simplify_token_expression (MULT IDENTITY a) =
-  simplify_token_expression a
-simplify_token_expression (MULT a IDENTITY) =
-  simplify_token_expression a
+-- simplify_token_expression (MULT IDENTITY a) =
+--   simplify_token_expression a
+-- simplify_token_expression (MULT a IDENTITY) =
+--   simplify_token_expression a
 
-simplify_token_expression (POW (MULT a b) n) =
-  let sa = simplify_token_expression a in
-  let sb = simplify_token_expression b in
-    MULT (POW sa n) (POW sb n)
+-- simplify_token_expression (POW (MULT a b) n) =
+--   let sa = simplify_token_expression a in
+--   let sb = simplify_token_expression b in
+--     MULT (POW sa n) (POW sb n)
 
-simplify_token_expression (MULT a (MULT b c)) =
-  let sa = simplify_token_expression a in
-  let sb = simplify_token_expression b in
-  let sc = simplify_token_expression c in
-  (MULT (MULT sa sb) sc)
+-- simplify_token_expression (MULT a (MULT b c)) =
+--   let sa = simplify_token_expression a in
+--   let sb = simplify_token_expression b in
+--   let sc = simplify_token_expression c in
+--   (MULT (MULT sa sb) sc)
 
-simplify_token_expression (MULT (MULT a b) c) =
-  let sa = simplify_token_expression a in
-  let sb = simplify_token_expression b in
-  let sc = simplify_token_expression c in
-  (MULT (MULT sa sb) sc)
+-- simplify_token_expression (MULT (MULT a b) c) =
+--   let sa = simplify_token_expression a in
+--   let sb = simplify_token_expression b in
+--   let sc = simplify_token_expression c in
+--   (MULT (MULT sa sb) sc)
 
-simplify_token_expression (POW a n) = POW (simplify_token_expression a) n
-simplify_token_expression (MULT a b) =
-  let sa = simplify_token_expression a in
-  let sb = simplify_token_expression b in
-    if token_eq sa sb
-    then POW sa 2
-    else MULT sa sb
+-- simplify_token_expression (POW a n) = POW (simplify_token_expression a) n
+-- simplify_token_expression (MULT a b) =
+--   let sa = simplify_token_expression a in
+--   let sb = simplify_token_expression b in
+--     if token_eq sa sb
+--     then POW sa 2
+--     else MULT sa sb
 
-simplify_token_expression (NAME a) = (NAME a)
-simplify_token_expression IDENTITY = IDENTITY
+-- simplify_token_expression (NAME a) = (NAME a)
+-- simplify_token_expression IDENTITY = IDENTITY
 
-simplify_token_expression_fix expr =
-  let sexpr = (simplify_token_expression expr) in
-  if token_eq sexpr expr
-  then expr
-  else simplify_token_expression_fix sexpr
-
--- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<<
-
+-- simplify_token_expression_fix expr =
+--   let sexpr = (simplify_token_expression expr) in
+--   if token_eq sexpr expr
+--   then expr
+--   else simplify_token_expression_fix sexpr
 
 left_mult_simplify :: Token -> Token
 left_mult_simplify (MULT (MULT a b) c) =
@@ -292,8 +291,6 @@ solve_for_token s t =
   let (rest,rhs) = move_left_to_rhs s (normal_form_left t) IDENTITY in
   let (rest',rhs') = move_right_to_rhs s (normal_form_right rest) rhs in
     collapse_fix $ rhs'
-
--- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<< -- PROBLEM HERE <<<<
   
 replace_name_by_token :: String -> Token -> Token -> Token
 replace_name_by_token s a (NAME t) =

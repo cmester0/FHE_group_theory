@@ -9,9 +9,9 @@ matrix_inverse order value =
   let r12 = value !! 0 !! 1 in
   let r21 = value !! 1 !! 0 in
   let r22 = value !! 1 !! 1 in
-  let r12_inverse = inverse order r12 in
-  let r21_inverse = inverse order r21 in
-  [[r22,r21_inverse],[r12_inverse,r11]]
+  let r12_inverse = mod (order - r12) order in
+  let r21_inverse = mod (order - r21) order in
+  [[r22,r12_inverse],[r21_inverse,r11]]
     
 -- 2 x 2 matrix multiplication
 matrix_mult :: Integer -> [[Integer]] -> [[Integer]] -> [[Integer]]
@@ -24,10 +24,9 @@ matrix_mult order a b =
      [mod r21 order,mod r22 order]]
 
 matrix_pow order m 0 = identity
-matrix_pow order m p =
-  if p < 0
-  then matrix_pow order (matrix_inverse order m) (-p)
-  else matrix_mult order m (matrix_pow order m (p-1))
+matrix_pow order m 1 = m
+matrix_pow order m p | p < 0 = matrix_inverse order (matrix_pow order m (-p))
+matrix_pow order m p | p > 0 = matrix_mult order m (matrix_pow order m (p-1))
 
 matrix_scalar order scalar value =
   let r11 = scalar * (value !! 0 !! 0) in

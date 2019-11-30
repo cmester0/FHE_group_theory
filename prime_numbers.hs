@@ -7,14 +7,18 @@ import System.Random
    --------------------------
 
 -- Returns a random k-1 bit prime
-large_prime :: Integer -> IO Integer
+large_prime :: Integer -> IO (Integer,Integer)
 large_prime k =
   randomRIO (2 ^ (k-2), 2 ^ (k-1)) >>= \rr ->
-  let r = 2 * rr + 1 in
-    is_prime r >>= \b ->
-    if b
-    then return r
-    else large_prime k
+  is_prime rr >>= \b ->
+  if b
+  then
+    let r = 2 * rr + 1 in
+      is_prime r >>= \b ->
+      if b
+      then return (r,rr)
+      else large_prime k
+  else large_prime k
 
 modPow :: Integer -> Integer -> Integer -> Integer
 modPow a b n =
@@ -81,4 +85,4 @@ extended_gcd a 0 = (1,0,a)
 extended_gcd a b =
   let (q,r) = a `quotRem` b in
     let (s,t,g) = extended_gcd b r in
-      (t,s-q * t, g)
+      (t,s-q*t,g)
