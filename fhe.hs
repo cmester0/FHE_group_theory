@@ -93,82 +93,82 @@ decode (h,t) ker pi =
   --- TESTS --
   ------------
 
--- testEquationSolver =
---   putStrLn $
---   let val = MULT (NAME "c") (MULT (NAME "a") (MULT (POW (NAME "a") (-2)) (NAME "b"))) in
---   "Pure: " ++ show val ++ "\n" ++
---   "Left: " ++ show (normal_form_left val) ++ "\n" ++
---   "Right: " ++ show (normal_form_right val) ++ "\n" ++
---   "RemLeft: " ++ show (remove_left "a" (normal_form_left val)) ++ "\n" ++
---   "RemRight: " ++ show (remove_right "a" (normal_form_right val)) ++ "\n" ++
---   "Rem: " ++ show (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val)))) ++ "\n" ++
---   "Pure Col: " ++ show (collapse val) ++ "\n" ++
---   "Rem Col: " ++ show (collapse (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val))))) ++ "\n" ++
---   "Rem Col Col: " ++ show (collapse (collapse (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val)))))) ++ "\n" ++
---   "Rem Col Col: " ++ show (reduced "a" (collapse (collapse (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val))))))) ++ "\n" ++
---   "Solveable: " ++ show (solvable "a" val) ++ "\n" ++
---   "Solution: " ++ show (solve_for_token "a" val) ++ "\n" ++
---   "Find generator: " ++ show (find_solution_for_generator "a" [val])
+testEquationSolver =
+  putStrLn $
+  let val = MULT (NAME "c") (MULT (NAME "a") (MULT (POW (NAME "a") (-2)) (NAME "b"))) in
+  "Pure: " ++ show val ++ "\n" ++
+  "Left: " ++ show (normal_form_left val) ++ "\n" ++
+  "Right: " ++ show (normal_form_right val) ++ "\n" ++
+  "RemLeft: " ++ show (remove_left "a" (normal_form_left val)) ++ "\n" ++
+  "RemRight: " ++ show (remove_right "a" (normal_form_right val)) ++ "\n" ++
+  "Rem: " ++ show (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val)))) ++ "\n" ++
+  "Pure Col: " ++ show (collapse val) ++ "\n" ++
+  "Rem Col: " ++ show (collapse (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val))))) ++ "\n" ++
+  "Rem Col Col: " ++ show (collapse (collapse (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val)))))) ++ "\n" ++
+  "Rem Col Col: " ++ show (reduced "a" (collapse (collapse (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val))))))) ++ "\n" ++
+  "Solveable: " ++ show (solvable "a" val) ++ "\n" ++
+  "Solution: " ++ show (solve_for_token "a" val) ++ "\n" ++
+  "Find generator: " ++ show (find_solution_for_generator "a" [val])
 
--- testEncodeZeroAndOne =
---   let k = 4 in
---   construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
---   sample_K >>= \k ->
---   sample_G >>= \g ->
---   putStrLn $
---   show (ker k) ++ " " ++ show (ker g)
+testEncodeZeroAndOne =
+  let k = 4 in
+  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
+  sample_K >>= \k ->
+  sample_G >>= \g ->
+  putStrLn $
+  show (ker k) ++ " " ++ show (ker g)
 
--- testSample =
---   let k = 4 in
---   construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
---   sample_K >>= \k ->
---   sample_G >>= \g -> 
---   putStrLn $
---   (show . pi) k ++ "\n" ++ (show . pi) g ++ "\n\n" ++
---   foldr (\a b -> a ++ "\n" ++ b) "" (map show (map pi (fst sl2_rep_obfuscated)))
+testSample =
+  let k = 4 in
+  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
+  sample_K >>= \k ->
+  sample_G >>= \g -> 
+  putStrLn $
+  (show . pi) k ++ "\n" ++ (show . pi) g ++ "\n\n" ++
+  foldr (\a b -> a ++ "\n" ++ b) "" (map show (map pi (fst sl2_rep_obfuscated)))
 
--- testEncodeDecode =
---   let k = 4 in
---   construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
---   let enc = (encode sample_G sample_K) in
---   (enc 0) >>= \(z00,z01) ->
---   (enc 1) >>= \(z10,z11) ->
---   putStrLn $
---   show (decode (z00,z01) ker pi) ++ "\n" ++
---   show (decode (z10,z11) ker pi) ++ "\n" ++
---   show (pi z10) ++ " " ++ show (pi z11)
+testEncodeDecode =
+  let k = 4 in
+  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
+  let enc = (encode sample_G sample_K) in
+  (enc 0) >>= \(z00,z01) ->
+  (enc 1) >>= \(z10,z11) ->
+  putStrLn $
+  show (decode (z00,z01) ker pi) ++ "\n" ++
+  show (decode (z10,z11) ker pi) ++ "\n" ++
+  show (pi z10) ++ " " ++ show (pi z11)
   
--- testEncodeAnd =
---   let k = 4 in
---   construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
---   let enc = (encode sample_G sample_K) in
---   (enc 1) >>= \a ->
---   (enc 1) >>= \b ->
---   (enc 0) >>= \c ->
---   (enc 1) >>= \d ->    
---   (enc 0) >>= \e ->
---   (enc 0) >>= \f ->
---   and_op a b >>= \ab ->
---   and_op c d >>= \(cd1,cd2) ->
---   and_op e f >>= \ef ->
---   putStrLn $
---   show (pi cd1, pi cd2) ++ "\n" ++
---   show (decode ab ker pi) ++ "\n" ++
---   show (decode (cd1,cd2) ker pi) ++ "\n" ++
---   show (decode ef ker pi) ++ "\n"
+testEncodeAnd =
+  let k = 4 in
+  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
+  let enc = (encode sample_G sample_K) in
+  (enc 1) >>= \a ->
+  (enc 1) >>= \b ->
+  (enc 0) >>= \c ->
+  (enc 1) >>= \d ->    
+  (enc 0) >>= \e ->
+  (enc 0) >>= \f ->
+  and_op a b >>= \ab ->
+  and_op c d >>= \(cd1,cd2) ->
+  and_op e f >>= \ef ->
+  putStrLn $
+  show (pi cd1, pi cd2) ++ "\n" ++
+  show (decode ab ker pi) ++ "\n" ++
+  show (decode (cd1,cd2) ker pi) ++ "\n" ++
+  show (decode ef ker pi) ++ "\n"
 
--- testMatrixOp =
---   let k = 10 in
---   generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,matri1,pq1) ->
---   let eval = evaluate (zip [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] matri1) pq1 in
---   let sample_G = sample_from_rep_2 k sl2_rep_1 in
---   sample_G >>= \val_pre ->
---   putStrLn $
---   let v = (eval val_pre) in
---   show v ++ "\n" ++
---   show (v >>= \x -> return $ matrix_pow pq1 x (-1)) ++ "\n" ++
---   show (v >>= \x -> return $ matrix_inverse pq1 x) ++ "\n" ++
---   show (v >>= \x -> return $ matrix_mult pq1 (matrix_inverse pq1 x) x)
+testMatrixOp =
+  let k = 10 in
+  generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,matri1,pq1) ->
+  let eval = evaluate (zip [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] matri1) pq1 in
+  let sample_G = sample_from_rep_2 k sl2_rep_1 in
+  sample_G >>= \val_pre ->
+  putStrLn $
+  let v = (eval val_pre) in
+  show v ++ "\n" ++
+  show (v >>= \x -> return $ matrix_pow pq1 x (-1)) ++ "\n" ++
+  show (v >>= \x -> return $ matrix_inverse pq1 x) ++ "\n" ++
+  show (v >>= \x -> return $ matrix_mult pq1 (matrix_inverse pq1 x) x)
 
 testEncodeNot =
   let k = 5 in
@@ -186,7 +186,6 @@ testEncodeNot =
   show (aa1) ++ "\n" ++ show aa2 ++ "\n" ++
   show (pi a1) ++ " " ++ show (pi a2) ++ "\n" ++
   show (pi (POW aa1 (-1))) ++ "\n" ++
-  show ((pi (POW aa1 (-1))) >>= \f -> (pi aa1) >>= \g -> return $ matrix_mult (fst p) f g) ++ "\n" ++
   show (decode (aa1,aa2) ker pi) ++ "\n" ++
   show (decode (a1,a2) ker pi) ++ "\n\n" ++
   
@@ -194,7 +193,6 @@ testEncodeNot =
   show (ab1) ++ "\n" ++ show ab2 ++ "\n" ++
   show (pi b1) ++ " " ++ show (pi b2) ++ "\n" ++
   show (pi (POW ab1 (-1))) ++ " " ++
-  show ((pi (POW ab1 (-1))) >>= \f -> (pi ab1) >>= \g -> return $ matrix_mult (fst p) f g) ++ "\n" ++
   show (decode (ab1,ab2) ker pi) ++ "\n" ++
   show (decode (b1,b2) ker pi) ++ "\n\n" ++
 
@@ -202,7 +200,6 @@ testEncodeNot =
   show (ac1) ++ " " ++ show ac2 ++ "\n" ++
   show (pi c1) ++ " " ++ show (pi c2) ++ "\n" ++
   show (pi (POW ac1 (-1))) ++ "\n" ++
-  show ((pi (POW ac1 (-1))) >>= \f -> (pi ac1) >>= \g -> return $ matrix_mult (fst p) f g) ++ "\n" ++
   show (decode (ac1,ac2) ker pi) ++ "\n" ++  
   show (decode (c1,c2) ker pi)
 
@@ -213,18 +210,6 @@ testEvaluate =
   let sample_G = sample_from_rep_2 k sl2_rep_1 in
   sample_G >>= \test_val ->
   putStrLn $
-  -- show pq1 ++ "\n" ++
-  -- show (eval $ NAME "u_1") ++ "\n" ++
-  -- show (eval $ NAME "t_1") ++ "\n" ++
-  -- show (eval $ NAME "h2_1") ++ "\n" ++
-  -- show (eval $ NAME "h_1") ++ "\n" ++
-  -- show (eval $ (POW (NAME "u_1") (-1)) `MULT` (NAME "u_1")) ++ "\n" ++
-  -- show (eval $ (POW (NAME "t_1") (-1)) `MULT` (NAME "t_1")) ++ "\n" ++
-  -- show (eval $ (POW (NAME "h2_1") (-1)) `MULT` (NAME "h2_1")) ++ "\n" ++
-  -- show (eval $ (POW (NAME "h_1") (-1)) `MULT` (NAME "h_1")) ++ "\n" ++
-  -- show (eval $ (((NAME "u_1") `MULT` (NAME "u_1")) `POW` (-1)) `MULT` (NAME "u_1") `MULT` (NAME "u_1")) ++ "\n" ++
-  -- show (test_val) ++ "\n" ++
-  -- show (eval $ test_val) ++ "\n" ++
   show (eval $ test_val `MULT` (test_val `POW` (-1)))
 
 testRep =
