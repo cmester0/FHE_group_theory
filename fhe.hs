@@ -192,7 +192,7 @@ testEncodeNot =
   show (pi ab1) ++ " " ++ show (pi ab2) ++ "\n" ++
   show (ab1) ++ "\n" ++ show ab2 ++ "\n" ++
   show (pi b1) ++ " " ++ show (pi b2) ++ "\n" ++
-  show (pi (POW ab1 (-1))) ++ " " ++
+  show (pi (POW ab1 (-1))) ++ "\n" ++
   show (decode (ab1,ab2) ker pi) ++ "\n" ++
   show (decode (b1,b2) ker pi) ++ "\n\n" ++
 
