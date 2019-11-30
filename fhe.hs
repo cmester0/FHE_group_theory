@@ -76,7 +76,7 @@ encode sample_G sample_K 0 =
 encode sample_G sample_K 1 =
   sample_G >>= \a ->
   sample_K >>= \b ->
-  return (a,MULT a b)
+  return (a, MULT a b)
   
 decode :: (Token,Token) -> (Token -> Bool) -> (Token -> Maybe [[Integer]]) -> Maybe Integer
 decode (h,t) ker pi =
@@ -128,14 +128,15 @@ testEncodeDecode =
   show (pi z10) ++ " " ++ show (pi z11)
 
 testEncodeNot =
-  let k = 4 in
+  let k = 10 in
   construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
   let enc = (encode sample_G sample_K) in
-  (enc 1) >>= \a ->
-  (enc 0) >>= \b ->
-  let (a1,a2) = not_op a in
+  (enc 1) >>= \(aa1,aa2) ->
+  let (a1,a2) = not_op (aa1,aa2) in
   putStrLn $
-  show (decode (a1,a2) ker pi) ++ "\n"
+  show (pi aa1) ++ " " ++ show (pi aa2) ++ "\n" ++
+  show (pi a1) ++ " " ++ show (pi a2) ++ "\n" ++
+  show (decode (a1,a2) ker pi)
   
 testEncodeAnd =
   let k = 4 in
@@ -147,6 +148,6 @@ testEncodeAnd =
   putStrLn $
   show (decode (ab1,ab2) ker pi)
 
-main = testEncodeNot
+main = testEncodeDecode
 
 -- Conjugate every element in representation by random element.
