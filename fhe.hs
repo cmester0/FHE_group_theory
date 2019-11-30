@@ -4,6 +4,28 @@ import Matrix
 import GroupRepresentation
 import Data.Maybe
 
+   ------------------------------
+   -- Logic operations to lift --
+   ------------------------------
+
+token_commutator :: Token -> Token -> Token
+token_commutator a b =  
+  let cmi = (\a -> POW a (-1)) in
+    a `MULT` b `MULT` (cmi a) `MULT` (cmi b)
+
+token_and_operation :: IO Token -> IO Token -> (Token,Token) -> (Token,Token) -> IO (Token,Token)
+token_and_operation sample1 sample2 (a1,a2) (b1,b2) =
+  sample1 >>= \z1 ->
+  sample2 >>= \z2 -> 
+  let cmi = (\a -> POW a (-1)) in
+  return (token_commutator (z1 `MULT` a1 `MULT` (cmi z1)) b1,
+          token_commutator (z2 `MULT` a2 `MULT` (cmi z2)) b2)
+
+token_not_operation :: (Token,Token) -> (Token,Token)
+token_not_operation (a1,a2) =
+  let cmi = (\a -> POW a (-1)) in
+  (a1, (cmi a2) `MULT` a1)
+
    -------------------
    -- Group sampler --
    -------------------
@@ -16,6 +38,7 @@ obfuscate_group :: Integer -> ([Token],[Token]) -> IO (([Token],[Token]),[Trace]
 obfuscate_group k rep =
   random_tietze rep (\rep -> sample_from_rep_2 k rep) k
 
+construct_group_sampler :: Integer -> IO ((IO Token, IO Token, ([Token],[Token])), ((Token,Token) -> (Token,Token) -> IO (Token,Token), (Token,Token) -> (Token,Token)), (Token -> Bool, Token -> Maybe [[Integer]]))
 construct_group_sampler k =
   generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,matri1,pq1) ->
   generate_group_rep k ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,matri2,pq2) ->
@@ -32,8 +55,15 @@ construct_group_sampler k =
   let pi1_sim = simplify_token_expression_fix . pi1 . phi in
   let ker_aux = evaluate (zip [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] matri1) pq1 . pi1_sim in
   let ker = (maybe False (\a -> a == identity)) . ker_aux in
-  return ((sample_G,sample_K,sl2_rep_obfuscated),(pi1_sim,ker),(pq1,pq2,ker_aux,rev_trace,sl2_rep))
-
+  let pi2 = (replace_name_by_token "u_1" IDENTITY) .
+            (replace_name_by_token "t_1" IDENTITY) .
+            (replace_name_by_token "h2_1" IDENTITY) .
+            (replace_name_by_token "h_1" IDENTITY) in
+  let pi2_sim = simplify_token_expression_fix . pi2 . phi in
+  let and_op = (token_and_operation sample_K sample_K) in
+  let not_op = token_not_operation in
+  return ((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,ker_aux))
+  
    ---------------------------
    -- Encoding and Decoding --
    ---------------------------
@@ -45,19 +75,24 @@ encode sample_G sample_K 0 =
   return (a, b)
 encode sample_G sample_K 1 =
   sample_G >>= \a ->
-  return (a,a)
+  sample_K >>= \b ->
+  return (a,MULT a b)
   
-decode :: Token -> (Token -> Bool) -> Integer
-decode t ker =
+decode :: (Token,Token) -> (Token -> Bool) -> (Token -> Maybe [[Integer]]) -> Maybe Integer
+decode (h,t) ker pi =
   if ker t
-  then 0
-  else 1
+  then Just 0
+  else
+    if (pi h) == (pi t)
+    then Just 1
+    else Nothing
 
-  ---
-  --- TESTS
-  ---
+  ------------
+  --- TESTS --
+  ------------
 
-testEquationSolver = 
+testEquationSolver =
+  putStrLn $
   let val = MULT (NAME "c") (MULT (NAME "a") (MULT (POW (NAME "a") (-2)) (NAME "b"))) in
   "Pure: " ++ show val ++ "\n" ++
   "Left: " ++ show (normal_form_left val) ++ "\n" ++
@@ -73,15 +108,45 @@ testEquationSolver =
   "Solution: " ++ show (solve_for_token "a" val) ++ "\n" ++
   "Find generator: " ++ show (find_solution_for_generator "a" [val])
 
-main =
+testEncodeZeroAndOne =
   let k = 4 in
-  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(pi1_sim,ker),(pq1,pq2,ker_aux,rev_trace,sl2_rep)) ->
+  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
   sample_K >>= \k ->
   sample_G >>= \g ->
   putStrLn $
-  show (sl2_rep) ++ "\n\n\n" ++
-  show (pi1_sim k) ++ "\n\n\n" ++
-  show (pq1,pq2) ++ "\n\n\n" ++
-  (foldr (\a b -> a ++ "\n" ++ b) "n" (map show rev_trace)) ++ "\n\n\n" ++
-  show (ker_aux k) ++ "\n\n\n" ++
-  show (decode k ker) 
+  show (ker k) ++ " " ++ show (ker g)
+
+testEncodeDecode =
+  let k = 4 in
+  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
+  let enc = (encode sample_G sample_K) in
+  (enc 0) >>= \(z00,z01) ->
+  (enc 1) >>= \(z10,z11) ->
+  putStrLn $
+  show (decode (z00,z01) ker pi) ++ "\n" ++
+  show (decode (z10,z11) ker pi) ++ "\n" ++
+  show (pi z10) ++ " " ++ show (pi z11)
+
+testEncodeNot =
+  let k = 4 in
+  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
+  let enc = (encode sample_G sample_K) in
+  (enc 1) >>= \a ->
+  (enc 0) >>= \b ->
+  let (a1,a2) = not_op a in
+  putStrLn $
+  show (decode (a1,a2) ker pi) ++ "\n"
+  
+testEncodeAnd =
+  let k = 4 in
+  construct_group_sampler k >>= \((sample_G,sample_K,sl2_rep_obfuscated),(and_op,not_op),(ker,pi)) ->
+  let enc = (encode sample_G sample_K) in
+  (enc 1) >>= \a ->
+  (enc 1) >>= \b ->
+  and_op a b >>= \(ab1,ab2) ->
+  putStrLn $
+  show (decode (ab1,ab2) ker pi)
+
+main = testEncodeDecode
+
+-- Conjugate every element in representation by random element.

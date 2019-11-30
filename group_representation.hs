@@ -16,12 +16,11 @@ data Token =
   | MULT Token Token
   | POW Token Integer
   | IDENTITY
-  deriving Show
--- instance Show Token where
---   show (NAME s) = s
---   show (MULT a b) = show a ++ "*" ++ "(" ++ show b ++ ")"
---   show (POW a n) = "(" ++ show a ++ ")^" ++ "(" ++ show n ++ ")"
---   show (IDENTITY) = "I"
+instance Show Token where
+  show (NAME s) = s
+  show (MULT a b) = show a ++ "*" ++ "(" ++ show b ++ ")"
+  show (POW a n) = "(" ++ show a ++ ")^" ++ "(" ++ show n ++ ")"
+  show (IDENTITY) = "I"
 
 base4 :: Integer -> [Integer]
 base4 m =
@@ -320,10 +319,6 @@ find_solution_for_generator s [] = Nothing
 find_solution_for_generator_token :: Token -> [Token] -> Maybe Token
 find_solution_for_generator_token (NAME s) a = find_solution_for_generator s a
 find_solution_for_generator_token _ _ = Nothing
-
-  -- if s_h_order == 1 || s_h_order == -1
-  -- then replace_name_by_token (solve_for_token s h)
-  -- else remove_generator s sym
 
 data Trace =
     ADD_GENERATOR Token Token
