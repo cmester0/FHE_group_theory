@@ -43,7 +43,7 @@ blood_type_example = do
   putStr "Y: "
   hFlush stdout
   y <- getLine  
-  fhe_protocol 5 (convertToNumber x) (convertToNumber y) >>= \e ->  
+  fhe_protocol 18 (convertToNumber x) (convertToNumber y) >>= \e ->  
     putStrLn $ show_just_print $
     e >>= \b ->
     return $
@@ -51,4 +51,6 @@ blood_type_example = do
     then "X can receive blood from Y"
     else "X can not receive blood from Y"
   
-main = blood_type_example
+main =
+  testEquationSolver
+  -- blood_type_example

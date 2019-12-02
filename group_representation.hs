@@ -290,7 +290,9 @@ solve_for_token :: String -> Token -> Token
 solve_for_token s t =
   let (rest,rhs) = move_left_to_rhs s (normal_form_left t) IDENTITY in
   let (rest',rhs') = move_right_to_rhs s (normal_form_right rest) rhs in
-    collapse_fix $ rhs'
+  if token_eq (collapse_fix rest') (NAME s)
+  then collapse_fix $ rhs'
+  else collapse_fix $ (POW rhs' (-1))
   
 replace_name_by_token :: String -> Token -> Token -> Token
 replace_name_by_token s a (NAME t) =

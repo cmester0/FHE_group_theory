@@ -65,13 +65,13 @@ obfuscate_group k rep =
 
 construct_group_sampler :: Integer -> IO ((([Token],[Token]), Integer -> IO (Token,Token)), ((Token,Token) -> (Token,Token) -> IO (Token,Token), (Token,Token) -> (Token,Token)), (Token -> Bool, (Token,Token) -> Maybe Integer))
 construct_group_sampler k =
-  generate_group_rep (2^k) ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,matri1,pq1) ->
-  generate_group_rep (2^k) ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,matri2,pq2) ->
+  generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,matri1,pq1) ->
+  generate_group_rep k ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,matri2,pq2) ->
   let sl2_rep = (fst sl2_rep_1 ++ fst sl2_rep_2, snd sl2_rep_1 ++ snd sl2_rep_2) in
   obfuscate_group k sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->
   let phi = (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated) in
   let psi = (calculate_value_from_trace (reverse rev_trace) sl2_rep) in
-  let sample_G = sample_from_rep_2 k sl2_rep_obfuscated in -- TODO: ??
+  let sample_G = sample_from_rep_2 k sl2_rep_obfuscated in
   let sample_K = sample_from_rep_2 k sl2_rep_2 >>= return . psi in
   let pi1 = (replace_name_by_token "u_2" IDENTITY) .
             (replace_name_by_token "t_2" IDENTITY) .
@@ -79,19 +79,18 @@ construct_group_sampler k =
             (replace_name_by_token "h_2" IDENTITY) in
   let pi1_sim = pi1 . phi in
   let ker_aux = evaluate (zip [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] matri1) pq1 . pi1_sim in
-  let ker = (maybe False (\a -> a == identity)) . ker_aux in
+  let ker = (maybe False (\a -> a == identity)) . ker_aux in  -- TODO: REMOVE matrix
   let pi2 = (replace_name_by_token "u_1" IDENTITY) .
             (replace_name_by_token "t_1" IDENTITY) .
             (replace_name_by_token "h2_1" IDENTITY) .
             (replace_name_by_token "h_1" IDENTITY) in
   let pi2_sim = pi2 . phi in
-  let and_op = (token_and_operation sample_G) in -- TODO SAmple G or K?
+  let and_op = (token_and_operation sample_G) in
   let not_op = token_not_operation in
   let enc = (encode sample_G sample_K) in
   let dec = (decode ker ker_aux) in
   return ((sl2_rep_obfuscated,enc),(and_op,not_op),(ker,dec))
   
-
   ------------
   --- TESTS --
   ------------
@@ -112,7 +111,7 @@ testEquationSolver =
   "Solveable: " ++ show (solvable "a" val) ++ "\n" ++
   "Solution: " ++ show (solve_for_token "a" val) ++ "\n" ++
   "Find generator: " ++ show (find_solution_for_generator "a" [val])
-
+    
 testEncodeZeroAndOne =
   let k = 4 in
   construct_group_sampler k >>= \((sl2_rep_obfuscated,enc),(and_op,not_op),(ker,dec)) ->
