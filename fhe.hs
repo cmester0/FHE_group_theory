@@ -7,6 +7,7 @@ import Matrix
 import GroupRepresentation
 import Data.Maybe
 
+
    ------------------------------
    -- Logic operations to lift --
    ------------------------------
@@ -32,41 +33,44 @@ token_not_operation (a1,a2) =
    -- Encoding and Decoding --
    ---------------------------
 
-encode :: IO Token -> IO Token -> Integer -> IO (Token,Token)
-encode sample_G sample_K 0 =
+encode :: IO Token -> IO Token -> Bool -> IO (Token,Token)
+encode sample_G sample_K False =
   sample_G >>= \ct ->
   sample_K >>= \h ->
   return (h, ct)
-encode sample_G sample_K 1 =
+encode sample_G sample_K True =
   sample_G >>= \ct ->
   sample_K >>= \h ->
   return (MULT ct h, ct)
   
-decode :: (Token -> Bool) -> (Token -> Maybe [[Integer]]) -> (Token,Token) -> Maybe Integer
+decode :: (Token -> Bool) -> (Token -> Token) -> (Token,Token) -> Either (Token,Token) Bool
 decode ker pi (h,t) =
   if ker h
-  then Just 0
+  then Right False
   else
-    if (pi h) == (pi t)
-    then Just 1
-    else Nothing
+    let ph = (simplify_token_expression_fix (pi h)) in
+    let pt = (simplify_token_expression_fix (pi t)) in
+    if token_eq ph pt
+    then Right True
+    else Left (ph,pt)
 
    -------------------
    -- Group sampler --
    -------------------
 
+generate_group_rep :: Integer -> (String,String,String,String) -> IO (([Token],[Token]),Integer)
 generate_group_rep k s =
-  fq (k+1) >>= \(pq,q) -> sl2_fq_rep_sym (pq,1,pq) s >>= \(sl2_rep,matri) ->
-  return (sl2_rep,matri,pq)
+  fq (k+1) >>= \(pq,q) -> sl2_fq_rep_sym (pq,1,pq) s >>= \(sl2_rep) ->
+  return (sl2_rep,pq)
 
 obfuscate_group :: Integer -> ([Token],[Token]) -> IO (([Token],[Token]),[Trace])
 obfuscate_group k rep =
   random_tietze rep (\rep -> sample_from_rep_2 k rep) k
 
-construct_group_sampler :: Integer -> IO ((([Token],[Token]), Integer -> IO (Token,Token)), ((Token,Token) -> (Token,Token) -> IO (Token,Token), (Token,Token) -> (Token,Token)), (Token -> Bool, (Token,Token) -> Maybe Integer))
+construct_group_sampler :: Integer -> IO ((([Token],[Token]), IO Token, IO Token), (Token -> Bool, Token -> Token)) -- TODO: Replace integer with bool!
 construct_group_sampler k =
-  generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,matri1,pq1) ->
-  generate_group_rep k ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,matri2,pq2) ->
+  generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,pq1) ->
+  generate_group_rep k ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,pq2) ->
   let sl2_rep = (fst sl2_rep_1 ++ fst sl2_rep_2, snd sl2_rep_1 ++ snd sl2_rep_2) in
   let k2 = div k 20 in
   obfuscate_group k2 sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->
@@ -78,20 +82,19 @@ construct_group_sampler k =
             (replace_name_by_token "t_2" IDENTITY) .
             (replace_name_by_token "h2_2" IDENTITY) .
             (replace_name_by_token "h_2" IDENTITY) in
-  let pi1_sim = pi1 . phi in
-  let ker_aux = evaluate (zip [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] matri1) pq1 . pi1_sim in
-  let ker = (maybe False (\a -> a == identity)) . ker_aux in  -- TODO: REMOVE matrix
-  let pi2 = (replace_name_by_token "u_1" IDENTITY) .
-            (replace_name_by_token "t_1" IDENTITY) .
-            (replace_name_by_token "h2_1" IDENTITY) .
-            (replace_name_by_token "h_1" IDENTITY) in
-  let pi2_sim = pi2 . phi in
+  let pi1_sim = simplify_token_expression_fix . pi1 . phi in
+  let ker = (token_eq IDENTITY) . pi1_sim in
+  return ((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_sim))
+
+construct_FHE :: Integer -> IO ((Bool -> IO (Token,Token)), ((Token,Token) -> (Token,Token) -> IO (Token,Token), (Token,Token) -> (Token,Token)), ((Token,Token) -> Either (Token,Token) Bool))
+construct_FHE k =
+  construct_group_sampler k >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_sim)) ->
+  let enc = (encode sample_G sample_K) in
   let and_op = (token_and_operation sample_G) in
   let not_op = token_not_operation in
-  let enc = (encode sample_G sample_K) in
-  let dec = (decode ker ker_aux) in
-  return ((sl2_rep_obfuscated,enc),(and_op,not_op),(ker,dec))
-  
+  let dec = (decode ker pi1_sim) in
+  return ((enc),(and_op,not_op),(dec))
+
   ------------
   --- TESTS --
   ------------
@@ -113,42 +116,53 @@ testEquationSolver =
   "Solution: " ++ show (solve_for_token "a" val) ++ "\n" ++
   "Find generator: " ++ show (find_solution_for_generator "a" [val])
     
-testEncodeZeroAndOne =
-  let k = 4 in
-  construct_group_sampler k >>= \((sl2_rep_obfuscated,enc),(and_op,not_op),(ker,dec)) ->
-  enc 0 >>= \k ->
-  enc 1 >>= \g ->
+testEncodeZeroAndOne k =
+  construct_group_sampler k >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi)) ->
+  sample_K >>= \k ->
+  sample_G >>= \g ->
   putStrLn $
-  show (ker (snd k)) ++ " " ++ show (ker (snd g))
+  show (ker k) ++ " " ++ show (ker g)
 
-testEncodeAnd =
-  let k = 4 in
-  construct_group_sampler k >>= \((sl2_rep_obfuscated,enc),(and_op,not_op),(ker,dec)) ->
-  (enc 1) >>= \a ->
-  (enc 1) >>= \b ->
-  (enc 0) >>= \c ->
-  (enc 1) >>= \d ->    
-  (enc 0) >>= \e ->
-  (enc 0) >>= \f ->
+testEncodeDecode k =
+  construct_FHE k >>= \((enc),(and_op,not_op),(dec)) ->
+  enc False >>= \zero ->
+  enc True >>= \one ->
+  putStrLn $
+  show (dec zero) ++ "\n" ++
+  show (dec one)
+
+testEncodeAnd k =
+  construct_FHE k >>= \((enc),(and_op,not_op),(dec)) ->
+  (enc True) >>= \a ->
+  (enc True) >>= \b ->
+  (enc False) >>= \c ->
+  (enc True) >>= \d ->    
+  (enc False) >>= \e ->
+  (enc False) >>= \f ->
   and_op a b >>= \ab ->
   and_op c d >>= \cd ->
   and_op e f >>= \ef ->
   putStrLn $
+  show (dec a) ++ "\n" ++
+  show (dec b) ++ "\n" ++
+  show (dec c) ++ "\n" ++
+  show (dec d) ++ "\n" ++
+  show (dec e) ++ "\n" ++
+  show (dec f) ++ "\n" ++
   show (dec ab) ++ "\n" ++
   show (dec cd) ++ "\n" ++
   show (dec ef) ++ "\n"
 
-testEncodeNot =
-  let k = 5 in
-  construct_group_sampler k >>= \((sl2_rep_obfuscated,enc),(and_op,not_op),(ker,dec)) ->
-  (enc 1) >>= \(aa1,aa2) ->
-  (enc 0) >>= \(ab1,ab2) ->
-  let (a1,a2) = not_op (aa1,aa2) in
-  let (b1,b2) = not_op (ab1,ab2) in
+testEncodeNot k =
+  construct_FHE k >>= \((enc),(and_op,not_op),(dec)) ->
+  (enc True) >>= \a ->
+  (enc False) >>= \b ->
+  let na = not_op a in
+  let nb = not_op b in
   putStrLn $
   
-  show (dec (aa1,aa2)) ++ "\n" ++
-  show (dec (a1,a2)) ++ "\n\n" ++
+  show (dec a) ++ "\n" ++
+  show (dec b) ++ "\n\n" ++
   
-  show (dec (ab1,ab2)) ++ "\n" ++
-  show (dec (b1,b2)) ++ "\n---"
+  show (dec na) ++ "\n" ++
+  show (dec nb) ++ "\n---"
