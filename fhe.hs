@@ -43,34 +43,35 @@ encode sample_G sample_K True =
   sample_K >>= \h ->
   return (MULT ct h, ct)
   
-decode :: (Token -> Bool) -> (Token -> Token) -> (Token,Token) -> Either (Token,Token) Bool
-decode ker pi (h,t) =
-  if ker h
+decode :: (Token -> Either String Bool) -> (Token -> Either String [[Integer]]) -> (Token,Token) -> Either String Bool
+decode ker pi_eval (h,t) =
+  (ker h) >>= \b ->
+  if b
   then Right False
-  else
-    let ph = (simplify_token_expression_fix (pi h)) in
-    let pt = (simplify_token_expression_fix (pi t)) in
-    if token_eq ph pt
+  else 
+    pi_eval t >>= \pt ->
+    pi_eval h >>= \ph ->
+    if ph == pt
     then Right True
-    else Left (ph,pt)
-
+    else Left . show $ (h,t)
+    
    -------------------
    -- Group sampler --
    -------------------
 
-generate_group_rep :: Integer -> (String,String,String,String) -> IO (([Token],[Token]),Integer)
+generate_group_rep :: Integer -> (String,String,String,String) -> IO (([Token],[Token]),Integer,[[[Integer]]])
 generate_group_rep k s =
-  fq (k+1) >>= \(pq,q) -> sl2_fq_rep_sym (pq,1,pq) s >>= \(sl2_rep) ->
-  return (sl2_rep,pq)
+  fq (k+1) >>= \(pq,q) -> sl2_fq_rep_sym (pq,1,pq) s >>= \(sl2_rep,matrix) ->
+  return (sl2_rep,pq,matrix)
 
 obfuscate_group :: Integer -> ([Token],[Token]) -> IO (([Token],[Token]),[Trace])
 obfuscate_group k rep =
   random_tietze rep (\rep -> sample_from_rep_2 k rep) k
 
-construct_group_sampler :: Integer -> IO ((([Token],[Token]), IO Token, IO Token), (Token -> Bool, Token -> Token)) -- TODO: Replace integer with bool!
+construct_group_sampler :: Integer -> IO ((([Token],[Token]), IO Token, IO Token), (Token -> Either String Bool, Token -> Either String [[Integer]])) -- TODO: Replace integer with bool!
 construct_group_sampler k =
-  generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,pq1) ->
-  generate_group_rep k ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,pq2) ->
+  generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,pq1,matrix1) ->
+  generate_group_rep k ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,_,_) ->
   let sl2_rep = (fst sl2_rep_1 ++ fst sl2_rep_2, snd sl2_rep_1 ++ snd sl2_rep_2) in
   let k2 = div k 20 in
   obfuscate_group k2 sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->
@@ -82,17 +83,18 @@ construct_group_sampler k =
             (replace_name_by_token "t_2" IDENTITY) .
             (replace_name_by_token "h2_2" IDENTITY) .
             (replace_name_by_token "h_2" IDENTITY) in
-  let pi1_sim = simplify_token_expression_fix . pi1 . phi in
-  let ker = (token_eq IDENTITY) . pi1_sim in
-  return ((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_sim))
+  let namesList = [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] in
+  let pi1_eval = (evaluate (zip namesList matrix1) pq1) . pi1 . phi in
+  let ker = \x -> pi1_eval x >>= \y -> return $ (identity == y) in
+  return ((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_eval))
 
-construct_FHE :: Integer -> IO ((Bool -> IO (Token,Token)), ((Token,Token) -> (Token,Token) -> IO (Token,Token), (Token,Token) -> (Token,Token)), ((Token,Token) -> Either (Token,Token) Bool))
+construct_FHE :: Integer -> IO ((Bool -> IO (Token,Token)), ((Token,Token) -> (Token,Token) -> IO (Token,Token), (Token,Token) -> (Token,Token)), ((Token,Token) -> Either String Bool))
 construct_FHE k =
-  construct_group_sampler k >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_sim)) ->
+  construct_group_sampler k >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi)) ->
   let enc = (encode sample_G sample_K) in
   let and_op = (token_and_operation sample_G) in
   let not_op = token_not_operation in
-  let dec = (decode ker pi1_sim) in
+  let dec = (decode ker pi) in
   return ((enc),(and_op,not_op),(dec))
 
   ------------

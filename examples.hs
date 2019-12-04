@@ -9,7 +9,7 @@ import Control.Monad
 convertToNumber :: String -> (Bool,Bool,Bool)
 convertToNumber s = (isInfixOf "A" s,isInfixOf "B" s,isInfixOf "+" s)
 
-fhe_protocol :: Integer -> (Bool,Bool,Bool) -> (Bool,Bool,Bool) -> IO (Either (Token,Token) Bool)
+fhe_protocol :: Integer -> (Bool,Bool,Bool) -> (Bool,Bool,Bool) -> IO (Either String Bool)
 fhe_protocol k (x0,x1,x2) (y0,y1,y2) =
   construct_FHE k >>= \((enc),(and_op,not_op),(dec)) ->
   -- Alice encrypts her there bits
@@ -45,63 +45,22 @@ blood_type_example k = do
     then "X can receive blood from Y"
     else "X can not receive blood from Y"
 
--- complex_computation k =
---   construct_FHE k >>= \((enc),(and_op,not_op),(dec)) ->    
---   (enc 1) >>= \one ->
---   (enc 0) >>= \zero ->
---   (((and_op one one >>= and_op one) >>= and_op one) >>= and_op one) >>= \temp ->
---   putStrLn . show $ (dec val)
+call_recursively 0 f x = return x
+call_recursively n f x =
+  f x >>= \y -> call_recursively (n-1) f y
 
-testSimplification =
-  putStrLn $
-  foldr (\a b -> show (snd a) ++ " vs " ++ show (simplify_token_expression_fix . fst $ a) ++ "\n" ++ b) ""
-  [(MULT (NAME "A") IDENTITY, "A"),
-   (MULT IDENTITY (NAME "A"), "A"),
-
-   (MULT (POW (NAME "A") 15) IDENTITY, "A^15"),
-   (MULT IDENTITY (POW (NAME "A") 15), "A^15"),
-
-   (MULT (POW (NAME "A") 10) (POW (NAME "A") 5), "A^15"),
-   
-   (MULT (POW (NAME "A") 10) (MULT (POW (NAME "A") 5) (NAME "B")), "A^15 * B"),
-   (MULT (POW IDENTITY 10) (MULT (POW (NAME "A") 5) (NAME "B")), "A^5 * B"),
-   (MULT (POW (NAME "A") 10) (MULT (POW IDENTITY 5) (NAME "B")), "A^10 * B"),
-   (MULT (POW (NAME "A") 10) (MULT (POW (NAME "A") 5) IDENTITY), "A^15"),
-   
-   (MULT (MULT (NAME "B") (POW (NAME "A") 5)) (POW (NAME "A") 10), "B * A^15"),
-   (MULT (MULT IDENTITY (POW (NAME "B") 5)) (POW (NAME "A") 10), "B^5 * A^10"),
-   (MULT (MULT (NAME "B") (POW IDENTITY 5)) (POW (NAME "A") 10), "B * A^10"),
-   (MULT (MULT (NAME "B") (POW (NAME "A") 5)) (POW IDENTITY 10), "B * A^5"),
-   
-   (MULT (MULT (MULT IDENTITY (NAME "A")) (NAME "B")) (NAME "C"), "A * B * C"),
-   (MULT (MULT (MULT (NAME "A") IDENTITY) (NAME "B")) (NAME "C"), "A * B * C"),
-   (MULT (MULT (MULT (NAME "A") (NAME "B")) IDENTITY) (NAME "C"), "A * B * C"),
-   (MULT (MULT (MULT (NAME "A") (NAME "B")) (NAME "C")) IDENTITY, "A * B * C"),
-
-   (MULT (POW (NAME "A") 5) (MULT (POW (NAME "B") 10) IDENTITY) , "A^5 * B^10"),
-   
-   (MULT (POW (NAME "A") (-1)) (NAME "A"),"I"),
-
-   (MULT (NAME "A") (POW (NAME "B") 1), "A * B"),
-
-   (MULT (POW (NAME "B") (-4)) (POW (NAME "B") 4), "I"),
-   (MULT (POW (NAME "B") (-4)) (MULT (POW (NAME "B") 4) (NAME "A")), "A"),
-   (MULT (POW (NAME "B") (-4)) (MULT (POW (NAME "B") 4) (POW (NAME "A") 6)), "A^6"),
-   (MULT (POW (NAME "A") (-6)) (MULT (POW (NAME "B") (-4)) (MULT (POW (NAME "B") 4) (POW (NAME "A") 6))), "I"),
-
-   (MULT (POW (NAME "A") 2) (MULT (NAME "B") (MULT (POW (NAME "B") (-1)) (POW (NAME "A") (-2)))), "I"),
-
-   (MULT (NAME "C") (MULT (POW (NAME "C") (-1)) (MULT (POW (NAME "B") (-7)) (POW (NAME "A") (-4)))),"B^-7*A^-4"),
-   (MULT (POW (NAME "A") 4) (MULT (POW (NAME "B") 7) (MULT (NAME "C") (MULT (POW (NAME "C") (-1)) (MULT (POW (NAME "B") (-7)) (POW (NAME "A") (-4)))))),"I"),
-   (MULT (NAME "A") (MULT (POW (NAME "B") 10) (MULT (POW (NAME "B") (-10)) (POW (NAME "A") (-1)))), "I"),
-   
-   (POW (NAME "A") 1, "A"),
-   (POW (NAME "A") 0, "I")]
+complex_computation k =
+  construct_FHE k >>= \((enc),(and_op,not_op),(dec)) ->    
+  enc True >>= \one ->
+  enc False >>= \zero ->
+  call_recursively 10 (and_op one) one >>= \val ->
+  putStrLn . show $ (dec val)
   
 main =
   -- testSimplification
   -- testEncodeDecode 10
   -- testEncodeZeroAndOne 10
-  -- testEncodeNot 80
-  testEncodeAnd 10
+  -- testEncodeNot 160
+  complex_computation 160
+  -- testEncodeAnd 160
   -- blood_type_example 10 -- 160
