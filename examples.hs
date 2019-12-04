@@ -35,7 +35,7 @@ fhe_protocol k (x0,x1,x2) (y0,y1,y2) =
 show_just_print (Just a) = show $ a
 show_just_print Nothing = "A problem occured"
 
-blood_type_example = do
+blood_type_example k = do
   putStrLn "Please enter blood types (AB+,O-,etc.) for X and Y..."
   putStr "X: "
   hFlush stdout
@@ -43,14 +43,20 @@ blood_type_example = do
   putStr "Y: "
   hFlush stdout
   y <- getLine  
-  fhe_protocol 18 (convertToNumber x) (convertToNumber y) >>= \e ->  
+  fhe_protocol k (convertToNumber x) (convertToNumber y) >>= \e ->  
     putStrLn $ show_just_print $
     e >>= \b ->
     return $
     if b == 1
     then "X can receive blood from Y"
     else "X can not receive blood from Y"
-  
-main =
-  testEquationSolver
-  -- blood_type_example
+
+complex_computation k =
+  construct_group_sampler k >>= \((sl2_rep_obfuscated,enc),(and_op,not_op),(ker,dec)) ->    
+  (enc 1) >>= \one ->
+  (enc 0) >>= \zero ->
+  (((and_op one one >>= and_op one) >>= and_op one) >>= and_op one) >>= \temp ->
+  (((((((dec temp) >>= enc) >>= and_op one) >>= and_op one) >>= and_op one) >>= and_op one) >>= and_op one) >>= \val ->
+  putStrLn . show $ (dec res)
+    
+main = complex_computation 160
