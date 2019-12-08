@@ -1,5 +1,5 @@
 run:
-	ghc --make *.hs
+	ghc --make *.hs -O3
 	./examples
 
 run_group:

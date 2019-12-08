@@ -6,6 +6,8 @@ import Data.List
 import System.Random
 import Control.Monad
 
+import RenderTokens
+
 convertToNumber :: String -> (Bool,Bool,Bool)
 convertToNumber s = (isInfixOf "A" s,isInfixOf "B" s,isInfixOf "+" s)
 
@@ -55,12 +57,31 @@ complex_computation k =
   enc False >>= \zero ->
   call_recursively 10 (and_op one) one >>= \val ->
   putStrLn . show $ (dec val)
-  
+
+loop 0 =
+  do
+    renderTokens $ "out" ++ show 0 ++ ".png"
+    putStrLn $ "out" ++ show 0 ++ ".png"
+loop i =
+  do
+    renderTokens $ "out" ++ show i ++ ".png"
+    putStrLn $ "out" ++ show i ++ ".png"
+    loop (i-1)
+
 main =
-  -- testSimplification
-  -- testEncodeDecode 10
-  -- testEncodeZeroAndOne 10
-  -- testEncodeNot 160
-  complex_computation 160
-  -- testEncodeAnd 160
-  -- blood_type_example 10 -- 160
+  -- putStrLn . show $ unroll_powers (POW (POW (NAME "s") (3)) (-3))
+  
+  -- group_rep_pos_list 30 >>=
+  -- putStrLn . show 
+
+   -- renderTokens $ "out.png"
+  loop 1000
+  
+-- main =
+--   -- testSimplification
+--   -- testEncodeDecode 10
+--   -- testEncodeZeroAndOne 10
+--   -- testEncodeNot 160
+--   complex_computation 160
+--   -- testEncodeAnd 160
+--   -- blood_type_example 10 -- 160
