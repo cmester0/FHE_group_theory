@@ -271,6 +271,8 @@ find_solution_for_generator_token _ _ = Nothing
 data Trace =
     ADD_GENERATOR Token Token
   | REMOVE_GENERATOR Token Token
+  | ADD_RELATION Token
+  | REMOVE_RELATION Token
   deriving Show
 
 -- Representation by strings:
@@ -287,10 +289,16 @@ rep_by_index 1 (rep,sym) sample_algorithm _ rev_trace =
     then
       let sol = (fromJust solution) in 
       let sym' = map (replace_token_by_token gen sol) sym in
-      return $ ((rep',sym'),REMOVE_GENERATOR gen sol : rev_trace)
+      return $ ((rep',sym'), REMOVE_GENERATOR gen sol : rev_trace)
     else return $ ((rep,sym),rev_trace)
--- rep_by_index 2 (rep,sym) sample_algorithm = TODO ADD RELATION
--- rep_by_index 3 (rep,sym) sample_algorithm = TODO REMOVE RELATION
+-- rep_by_index 2 (rep,sym) sample_algorithm _ rev_trace =
+--   randomRIO (0,length sym - 1) >>= \i ->
+--   randomRIO (1,160) >>= \n -> -- 160?
+--   let rel = (POW (sym !! i) n) in
+--   let sym' = rel : sym in
+--   return $ ((rep,sym'), ADD_RELATION rel : rev_trace)
+-- rep_by_index 3 (rep,sym) sample_algorithm _ rev_trace =
+  
 
 rep_randomizer :: ([Token],[Token]) -> IO Token -> Integer -> [Trace] -> IO (([Token],[Token]),[Trace])
 rep_randomizer (rep,sym) sample_algorithm counter rev_trace =

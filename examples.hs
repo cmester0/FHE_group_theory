@@ -58,15 +58,15 @@ complex_computation k =
   call_recursively 10 (and_op one) one >>= \val ->
   putStrLn . show $ (dec val)
 
-loop 0 =
+loop render 0 =
   do
-    renderTokens $ "out" ++ show 0 ++ ".png"
+    render $ "out" ++ show 0 ++ ".png"
     putStrLn $ "out" ++ show 0 ++ ".png"
-loop i =
+loop render i =
   do
-    renderTokens $ "out" ++ show i ++ ".png"
+    render $ "out" ++ show i ++ ".png"
     putStrLn $ "out" ++ show i ++ ".png"
-    loop (i-1)
+    loop render (i-1)
 
 main =
   -- putStrLn . show $ unroll_powers (POW (POW (NAME "s") (3)) (-3))
@@ -75,7 +75,8 @@ main =
   -- putStrLn . show 
 
    -- renderTokens $ "out.png"
-  loop 1000
+  -- loop renderTokens 100
+  loop renderTokensObfuscated 100
   
 -- main =
 --   -- testSimplification
