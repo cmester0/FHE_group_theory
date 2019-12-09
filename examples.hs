@@ -69,6 +69,7 @@ loop render i =
     loop render (i-1)
 
 main =
+  testEquationSolver
   -- putStrLn . show $ unroll_powers (POW (POW (NAME "s") (3)) (-3))
   
   -- group_rep_pos_list 30 >>=
@@ -76,7 +77,7 @@ main =
 
    -- renderTokens $ "out.png"
   -- loop renderTokens 100
-  loop renderTokensObfuscated 100
+  -- loop renderTokensObfuscated 100
   
 -- main =
 --   -- testSimplification

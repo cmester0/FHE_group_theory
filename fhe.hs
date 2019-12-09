@@ -13,21 +13,16 @@ import Data.Maybe
    ------------------------------
 
 token_commutator :: Token -> Token -> Token
-token_commutator a b =  
-  let cmi = (\x -> POW x (-1)) in
-    a `MULT` b `MULT` (cmi a) `MULT` (cmi b)
+token_commutator a b =  MULT [a , b , (a `POW` (-1)) , (b `POW` (-1))]
 
 token_and_operation :: IO Token -> (Token,Token) -> (Token,Token) -> IO (Token,Token)
 token_and_operation sample (a1,a2) (b1,b2) =
   sample >>= \z ->
-  let cmi = (\a -> POW a (-1)) in
-  return (token_commutator (z `MULT` a1 `MULT` (cmi z)) b1,
-          token_commutator (z `MULT` a2 `MULT` (cmi z)) b2)
+  return (token_commutator (MULT [z , a1 , (z `POW` (-1))]) b1,
+          token_commutator (MULT [z , a2 , (z `POW` (-1))]) b2)
 
 token_not_operation :: (Token,Token) -> (Token,Token)
-token_not_operation (a1,a2) =
-  let cmi = (\a -> POW a (-1)) in
-  ((a1 `POW` (-1)) `MULT` a2, a2)
+token_not_operation (a1,a2) = (MULT [(a1 `POW` (-1)) , a2], a2)
 
    ---------------------------
    -- Encoding and Decoding --
@@ -41,7 +36,7 @@ encode sample_G sample_K False =
 encode sample_G sample_K True =
   sample_G >>= \ct ->
   sample_K >>= \h ->
-  return (MULT ct h, ct)
+  return (MULT [ct , h], ct)
   
 decode :: (Token -> Either String Bool) -> (Token -> Either String [[Integer]]) -> (Token,Token) -> Either String Bool
 decode ker pi_eval (h,t) =
@@ -103,17 +98,18 @@ construct_FHE k =
 
 testEquationSolver =
   putStrLn $
-  let val = MULT (NAME "c") (MULT (NAME "a") (MULT (POW (NAME "a") (-2)) (NAME "b"))) in
+  let val = MULT [(NAME "c") , (NAME "a") , (POW (NAME "a") (-2)) , (NAME "b")] in
   "Pure: " ++ show val ++ "\n" ++
-  "Left: " ++ show (normal_form_left val) ++ "\n" ++
-  "Right: " ++ show (normal_form_right val) ++ "\n" ++
-  "RemLeft: " ++ show (remove_left "a" (normal_form_left val)) ++ "\n" ++
-  "RemRight: " ++ show (remove_right "a" (normal_form_right val)) ++ "\n" ++
-  "Rem: " ++ show (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val)))) ++ "\n" ++
+  "Normal: " ++ show (normal_form val) ++ "\n" ++
+  "MoveL: " ++ show (move_to_rhs_aux "a" (normal_form val) IDENTITY) ++ "\n" ++
+  "Flip: " ++ show (normal_form $ POW val (-1)) ++ "\n" ++
+  "MoveR: " ++ show (move_to_rhs_aux "a" (normal_form $ POW val (-1)) IDENTITY) ++ "\n" ++
+  "FlipFlip: " ++ show (normal_form $ POW (normal_form $ POW val (-1)) (-1)) ++ "\n" ++
+  "Rem?: " ++ show (move_to_rhs "a" (normal_form val) IDENTITY) ++ "\n" ++
+  "Rem: " ++ show (remove_tokens "a" (normal_form val)) ++ "\n" ++
   "Pure Col: " ++ show (collapse val) ++ "\n" ++
-  "Rem Col: " ++ show (collapse (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val))))) ++ "\n" ++
-  "Rem Col Col: " ++ show (collapse (collapse (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val)))))) ++ "\n" ++
-  "Rem Col Col: " ++ show (reduced "a" (collapse (collapse (remove_right "a" (normal_form_right (remove_left "a" (normal_form_left val))))))) ++ "\n" ++
+  "Rem Col: " ++ show (collapse (remove_tokens "a" (normal_form val))) ++ "\n" ++
+  "Rem Col_fix: " ++ show (collapse_fix . (remove_tokens "a") .  normal_form $ val) ++ "\n" ++
   "Solveable: " ++ show (solvable "a" val) ++ "\n" ++
   "Solution: " ++ show (solve_for_token "a" val) ++ "\n" ++
   "Find generator: " ++ show (find_solution_for_generator "a" [val])
