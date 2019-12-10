@@ -65,15 +65,16 @@ obfuscate_group k rep =
 
 construct_group_sampler :: Integer -> IO ((([Token],[Token]), IO Token, IO Token), (Token -> Either String Bool, Token -> Either String [[Integer]])) -- TODO: Replace integer with bool!
 construct_group_sampler k =
+  let k2 = 50 in
+  let k3 = k in
   generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,pq1,matrix1) ->
   generate_group_rep k ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,_,_) ->
   let sl2_rep = (fst sl2_rep_1 ++ fst sl2_rep_2, snd sl2_rep_1 ++ snd sl2_rep_2) in
-  let k2 = k - 100 in
   obfuscate_group k2 sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->
   let phi = (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated) in
   let psi = (calculate_value_from_trace (reverse rev_trace) sl2_rep) in
-  let sample_G = sample_from_rep_2 k sl2_rep_obfuscated in
-  let sample_K = sample_from_rep_2 k sl2_rep_2 >>= return . psi in
+  let sample_G = sample_from_rep_2 k3 sl2_rep_obfuscated in -- TODO BETTER SAMPLING -- sl2_rep_obfuscated
+  let sample_K = sample_from_rep_2 k3 sl2_rep_2 >>= return . psi in
   let pi1 = (replace_name_by_token "u_2" IDENTITY) .
             (replace_name_by_token "t_2" IDENTITY) .
             (replace_name_by_token "h2_2" IDENTITY) .

@@ -69,21 +69,54 @@ loop render i =
     loop render (i-1)
 
 main =
-  testEquationSolver
+  -- testEquationSolver
   -- putStrLn . show $ unroll_powers (POW (POW (NAME "s") (3)) (-3))
+
+  -- let k = 10 in
+  -- generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep,pq1,matrix1) ->
+  -- random_tietze sl2_rep (\rep -> sample_from_rep_2 k rep) 40 >>=
+  -- putStrLn . foldr (\a b -> a ++ "\n" ++ b) "" . map show . snd
   
-  -- group_rep_pos_list 30 >>=
+    -- group_rep_pos_list 30 >>=
   -- putStrLn . show 
 
    -- renderTokens $ "out.png"
   -- loop renderTokens 100
-  -- loop renderTokensObfuscated 100
+  -- loop renderTokensObfuscated 1000
+
+  -- (randomIO :: IO Integer) >>= \x ->
+  -- do
+  --   putStrLn . show $ (abs x)
+  --   renderTokensObfuscated $ (show . abs $ x) ++ ".png"
+
+  -- loop renderRandomTokensObfuscated 1000
   
--- main =
---   -- testSimplification
---   -- testEncodeDecode 10
---   -- testEncodeZeroAndOne 10
---   -- testEncodeNot 160
---   complex_computation 160
---   -- testEncodeAnd 160
---   -- blood_type_example 10 -- 160
+  -- putStrLn $
+  -- (show . mult_simplify_fix $ MULT [POW (NAME "a") (-1), MULT [POW (NAME "b") (-1),MULT [POW (NAME "a") (-1), NAME "c"]]]) ++ "\n" ++
+  -- foldr (\a b -> (show . simple_form_fix $ a) ++ "\n" ++ b) "" 
+  -- [MULT [POW (NAME "a") (-1), POW (MULT [NAME "a",NAME "b"]) (-1), NAME ("c")],
+  --  MULT [POW (NAME "a") (-1), MULT [POW (NAME "b") (-1),MULT [POW (NAME "a") (-1), NAME "c"]]],
+  --  MULT [POW (NAME "a") (-1), MULT [POW (NAME "a") (-1),MULT [POW (NAME "b") (-1), NAME "c"]]],
+  --  MULT [POW (NAME "a") (-1), MULT [NAME "a",NAME "b"], NAME ("c")]]
+
+  let k = 10 in
+  let k2 = 40 in
+  generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep,pq,matrix) ->
+  obfuscate_group k2 sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->
+  do
+    putStrLn $ show pq ++ "\n"
+    putStrLn $ foldr (\a b -> show a ++ "\n" ++ b) "" rev_trace
+    putStrLn $ show $ fst sl2_rep_obfuscated
+
+
+  
+  -- construct_group_sampler 10 >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_eval)) ->
+  -- putStrLn . show . snd $ sl2_rep_obfuscated
+
+  -- testSimplification
+  -- testEncodeDecode 10
+  -- testEncodeZeroAndOne 10
+  -- testEncodeNot 160
+  -- complex_computation 160
+  -- testEncodeAnd 160
+  -- blood_type_example 10 -- 160

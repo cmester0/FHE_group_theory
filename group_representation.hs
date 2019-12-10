@@ -1,5 +1,4 @@
 module GroupRepresentation where
-{- ViewPatterns -}
 
 import Data.Maybe
 import Data.List
@@ -15,7 +14,7 @@ import Matrix
 --   (large_prime k) >>= \p ->
 --   return (p,q,p ^ q)
 
--- DON'T USE PRIME POWER
+-- TODO: DO OR DON'T USE PRIME POWER ?
 
 fq :: Integer -> IO (Integer,Integer)
 fq k = large_prime k
@@ -116,22 +115,36 @@ unfold_powers (POW a n)
 unfold_powers (NAME t) = NAME t
 unfold_powers IDENTITY = IDENTITY
 
+-- TODO: Something goes wron recursively (fixpoint fixes this)
 mult_simplify :: Token -> Token
 mult_simplify (MULT l) =
-  MULT (l >>= \x ->
+  MULT (map mult_simplify l >>= \x ->
            case x of
-             MULT k -> k
+             MULT k -> map mult_simplify k
              v -> return $ mult_simplify v)
 mult_simplify (POW v n) =  POW (mult_simplify v) n
 mult_simplify v = v
 
+mult_simplify_fix a =
+  let ma = mult_simplify a in
+    if token_eq ma a
+    then ma
+    else mult_simplify_fix ma
+
 remove_identity (MULT l) =
   MULT (map remove_identity (filter (not . token_eq IDENTITY) l))
 remove_identity (POW IDENTITY n) = IDENTITY
+remove_identity (POW a 0) = IDENTITY
 remove_identity (POW a n) = POW (remove_identity a) n
 remove_identity t = t
 
-normal_form_aux = remove_identity . mult_simplify . unfold_powers
+remove_identity_fix a =
+  let ra = remove_identity a in
+    if token_eq ra a
+    then ra
+    else remove_identity_fix ra
+
+normal_form_aux = remove_identity_fix . mult_simplify_fix . unfold_powers
 normal_form a =
   let na = normal_form_aux a in
     if token_eq na a
@@ -157,6 +170,7 @@ collapse (MULT (a : b : xr)) =
   MULT [collapse a, collapse $ MULT $ b : xr]
 collapse (MULT [x]) = collapse x
 collapse (MULT []) = IDENTITY
+collapse (POW a 0) = IDENTITY
 collapse (POW a n) = POW (collapse a) n
 collapse (NAME a) = NAME a
 collapse IDENTITY = IDENTITY
@@ -166,6 +180,17 @@ collapse_fix a =
   if token_eq ca a
   then a
   else collapse_fix ca
+
+simple_form =
+  -- mult_simplify_fix . collapse_fix . 
+  remove_identity_fix . mult_simplify_fix
+
+simple_form_fix a =
+  let sa = simple_form a in
+  if token_eq sa a
+  then a
+  else simple_form_fix sa
+
 
 move_to_rhs_aux :: String -> Token -> Token -> (Token,Token)
 move_to_rhs_aux s (MULT ((NAME t) : xr)) rhs =
@@ -189,10 +214,10 @@ move_to_rhs_aux s a rhs = (a,rhs)
 
 move_to_rhs :: String -> Token -> Token -> (Token,Token)
 move_to_rhs s t rhs =
-  let (x,rhs') = (move_to_rhs_aux s t IDENTITY) in
+  let (x,rhs') = (move_to_rhs_aux s t rhs) in
   let flip = \v -> normal_form (POW v (-1)) in 
-  let (y,rhs'') = move_to_rhs_aux s (flip x) IDENTITY in
-    (flip y , normal_form $ MULT [rhs',rhs,(flip rhs'')])
+  let (y,rhs'') = move_to_rhs_aux s (flip x) (flip rhs') in
+    (flip y , normal_form $ flip rhs'')
 
 remove_tokens :: String -> Token -> Token
 remove_tokens s t = normal_form . fst $ move_to_rhs s t IDENTITY
@@ -239,34 +264,89 @@ data Trace =
   | REMOVE_RELATION Token
   deriving Show
 
+-- Remove subsection by all other things in symbols:
+remove_subsection :: Token -> Token -> Either Token Token
+remove_subsection (MULT l) a =
+  if token_eq a (MULT l)
+  then Right IDENTITY
+  else 
+    let (change,tokens) = unzip (map (\x -> remove_subsection x a) l >>= \x ->
+                                    case x of
+                                      Left b -> return (False,b)
+                                      Right b -> return (True,b))
+    in
+      if foldr (||) False change
+      then Right $ MULT tokens
+      else Left $ MULT tokens
+remove_subsection (POW a n) b =
+  if token_eq (POW a n) b
+  then Right IDENTITY
+  else
+    case remove_subsection a b of
+      Left c -> Left $ POW c n
+      Right c -> Right $ POW c n
+remove_subsection x a =
+  if token_eq x a
+  then Right IDENTITY
+  else Left x
+
+remove_subsection_list :: Token -> [Token] -> Either Token Token
+remove_subsection_list x [] = Left x
+remove_subsection_list x (y : ys) =
+  case remove_subsection x y of
+    Right x' ->
+      case remove_subsection_list x' ys of
+        Right y' -> Right y'
+        Left y' -> Right y'
+    Left x' -> remove_subsection_list x' ys
+  
+
+remove_relation :: [Token] -> [Token] -> Maybe (Token,[Token])
+remove_relation (x : sym') sym =
+  let symsubx = filter (not . token_eq x) sym in
+  case remove_subsection_list x symsubx of
+    Left _ -> Nothing
+    Right y ->
+      if token_eq y IDENTITY
+      then Just (x,symsubx)
+      else Nothing
+
 -- Representation by strings:
 -- TODO: ADD TRACE
 rep_by_index :: Integer -> ([Token],[Token]) -> IO Token -> Integer -> [Trace] -> IO (([Token],[Token]),[Trace])
 rep_by_index 0 (rep,sym) sample_algorithm counter rev_trace =
   sample_algorithm >>= \a ->
+  let a' = simple_form_fix a in
   let b = NAME ("gen_" ++ show counter) in
-  return $ ((b : rep, MULT [(POW b (-1)) , a] : sym), ADD_GENERATOR b a : rev_trace)
+  return $ ((b : rep, simple_form_fix (MULT [(POW b (-1)) , a']) : sym), ADD_GENERATOR b a' : rev_trace)
 rep_by_index 1 (rep,sym) sample_algorithm _ rev_trace =
   (randomRIO (0,length rep - 1) >>= \i -> return $ (take i rep ++ drop (i+1) rep, rep !! i)) >>= \(rep',gen) ->
   let solution = (find_solution_for_generator_token gen sym) in
     if isJust solution
     then
       let sol = (fromJust solution) in 
-      let sym' = map (replace_token_by_token gen sol) sym in
+      let sym' = map (simple_form . replace_token_by_token gen sol) sym in
       return $ ((rep',sym'), REMOVE_GENERATOR gen sol : rev_trace)
     else return $ ((rep,sym),rev_trace)
--- rep_by_index 2 (rep,sym) sample_algorithm _ rev_trace =
---   randomRIO (0,length sym - 1) >>= \i ->
---   randomRIO (1,160) >>= \n -> -- 160?
---   let rel = (POW (sym !! i) n) in
---   let sym' = rel : sym in
---   return $ ((rep,sym'), ADD_RELATION rel : rev_trace)
--- rep_by_index 3 (rep,sym) sample_algorithm _ rev_trace =
+rep_by_index 2 (rep,sym) sample_algorithm _ rev_trace =
+  randomRIO (0,length sym - 1) >>= \i ->
+  randomRIO (1,160) >>= \n -> -- 160?
+  let rel = (POW (sym !! i) n) in
+  let sym' = rel : sym in
+  return $ ((rep,sym'), ADD_RELATION rel : rev_trace)
+rep_by_index 3 (rep,sym) sample_algorithm _ rev_trace =
+  let k = remove_relation sym sym in
+    if isJust k
+    then
+      let (rel,sym') = fromJust k
+      in return $ ((rep,sym'), REMOVE_RELATION rel : rev_trace)
+    else
+      return $ ((rep,sym), rev_trace)
   
 
 rep_randomizer :: ([Token],[Token]) -> IO Token -> Integer -> [Trace] -> IO (([Token],[Token]),[Trace])
 rep_randomizer (rep,sym) sample_algorithm counter rev_trace =
-  randomRIO (0,1) >>= \r -> -- TODO: (0,3)
+  randomRIO (0,3) >>= \r -> -- TODO: (0,3)
   rep_by_index r (rep,sym) sample_algorithm counter rev_trace
 
 find_token_index t [] = -1
@@ -284,7 +364,10 @@ calculate_value_from_rev_trace (ADD_GENERATOR gen sol : rev_trace) (rep,sym) val
   calculate_value_from_rev_trace rev_trace (rep',sym') (replace_token_by_token gen sol value)    
 calculate_value_from_rev_trace (REMOVE_GENERATOR a b : rev_trace) (rep,sym) value =
   calculate_value_from_rev_trace rev_trace (a : rep, b : sym) (value)
-
+calculate_value_from_rev_trace (ADD_RELATION rel : trace) (rep,sym) value =
+  calculate_value_from_rev_trace trace (rep,filter (not . token_eq rel) sym) value
+calculate_value_from_rev_trace (REMOVE_RELATION rel : trace) (rep,sym) value =
+  calculate_value_from_rev_trace trace (rep,rel : sym) value
 
 calculate_value_from_trace :: [Trace] -> ([Token],[Token]) -> Token -> Token
 calculate_value_from_trace [] _ value = value
@@ -295,7 +378,11 @@ calculate_value_from_trace (REMOVE_GENERATOR gen sol : trace) (rep,sym) value =
   let index = find_token_index gen rep in
   let rep' = (take index rep ++ drop (index+1) rep) in
   calculate_value_from_trace trace (rep',sym') (replace_token_by_token gen sol value)    
-
+calculate_value_from_trace (ADD_RELATION rel : trace) (rep,sym) value =
+  calculate_value_from_trace trace (rep,rel : sym) value
+calculate_value_from_trace (REMOVE_RELATION rel : trace) (rep,sym) value =
+  calculate_value_from_trace trace (rep,filter (not . token_eq rel) sym) value
+  
 -- Sample random element using a representation: // TODO: is this correct sampling?
 sample_from_rep :: ([Token],[Token]) -> Integer -> IO Token
 sample_from_rep (rep,sym) pq =
@@ -313,13 +400,13 @@ sample_from_rep_2 :: Integer -> ([Token],[Token]) -> IO Token
 sample_from_rep_2 k (rep,sym) =
   let list_value = [0..(length rep - 1)] >>= \i ->
         return $
-        randomRIO (0,k) >>= \p ->
-        if p == 0
-        then return $ IDENTITY
-        else return $ (POW (rep !! i) p)
+        (randomIO :: IO Bool) >>= \b ->
+        if b
+        then randomRIO (1,k) >>= \p -> return $ (POW (rep !! i) p)
+        else return $ IDENTITY
   in
     (sequence list_value) >>= \l ->
-    return $ MULT l
+    return $ simple_form $ MULT l
 
 
 apply_n_times :: Integer -> (a -> IO a) -> IO a -> IO a
