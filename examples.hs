@@ -82,14 +82,14 @@ main =
 
    -- renderTokens $ "out.png"
   -- loop renderTokens 100
-  -- loop renderTokensObfuscated 1000
+  -- loop renderTokensObfuscated 100
 
   -- (randomIO :: IO Integer) >>= \x ->
   -- do
   --   putStrLn . show $ (abs x)
   --   renderTokensObfuscated $ (show . abs $ x) ++ ".png"
-
-  -- loop renderRandomTokensObfuscated 1000
+  
+  loop renderRandomTokensObfuscated 1000
   
   -- putStrLn $
   -- (show . mult_simplify_fix $ MULT [POW (NAME "a") (-1), MULT [POW (NAME "b") (-1),MULT [POW (NAME "a") (-1), NAME "c"]]]) ++ "\n" ++
@@ -98,18 +98,105 @@ main =
   --  MULT [POW (NAME "a") (-1), MULT [POW (NAME "b") (-1),MULT [POW (NAME "a") (-1), NAME "c"]]],
   --  MULT [POW (NAME "a") (-1), MULT [POW (NAME "a") (-1),MULT [POW (NAME "b") (-1), NAME "c"]]],
   --  MULT [POW (NAME "a") (-1), MULT [NAME "a",NAME "b"], NAME ("c")]]
-
-  let k = 10 in
-  let k2 = 40 in
-  generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep,pq,matrix) ->
-  obfuscate_group k2 sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->
-  do
-    putStrLn $ show pq ++ "\n"
-    putStrLn $ foldr (\a b -> show a ++ "\n" ++ b) "" rev_trace
-    putStrLn $ show $ fst sl2_rep_obfuscated
-
-
   
+  -- let k = 3 in
+  -- let k2 = 80 in
+  -- generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep,pq,matrix) ->
+  -- do
+  -- putStrLn $ show "!=0"
+  -- random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) [] 0 1 >>= \(sl2_rep,rev_trace) ->
+  --   do
+  --   putStrLn $ show "!=1"
+  --   random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 1 1 >>= \(sl2_rep,rev_trace) ->
+  --     do
+  --     putStrLn $ show "!=2"
+  --     random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 2 1 >>= \(sl2_rep,rev_trace) ->
+  --       do
+  --       putStrLn $ show "!=3"
+  --       random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 3 1 >>= \(sl2_rep,rev_trace) ->
+  --         do
+  --         putStrLn $ show "!=4"
+  --         random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 4 1 >>= \(sl2_rep,rev_trace) ->
+  --           do
+  --           putStrLn $ show "!=5"
+  --           random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 5 1 >>= \(sl2_rep,rev_trace) ->
+  --             do
+  --             putStrLn $ show "!=6"
+  --             random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 6 1 >>= \(sl2_rep,rev_trace) ->
+  --               do
+  --               putStrLn $ show "!=7"
+  --               random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 7 1 >>= \(sl2_rep,rev_trace) ->
+  --                 do
+  --                 putStrLn $ show "!=8"
+  --                 random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 8 1 >>= \(sl2_rep,rev_trace) ->
+  --                   do
+  --                   putStrLn $ show "!=9"
+  --                   random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 9 1 >>= \(sl2_rep,rev_trace) ->
+  --                     do
+  --                     putStrLn $ show "!=10"
+  --                     random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 10 1 >>= \(sl2_rep,rev_trace) ->
+  --                       do
+  --                       putStrLn $ show "!=11"
+  --                       random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 11 1 >>= \(sl2_rep,rev_trace) ->
+  --                         do
+  --                         putStrLn $ show "!=12"
+  --                         random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                           do
+  --                           putStrLn $ show "!=13"
+  --                           random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                             do
+  --                             putStrLn $ show "!=14"
+  --                             random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                               do
+  --                               putStrLn $ show "!=15"
+  --                               random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                 do
+  --                                 putStrLn $ show "!=16"
+  --                                 random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                   do
+  --                                   putStrLn $ show "!=17"
+  --                                   random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                     do
+  --                                     putStrLn $ show "!=18"
+  --                                     random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                       do
+  --                                       putStrLn $ show "!=19"
+  --                                       random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                         do
+  --                                         putStrLn $ show "!=20"
+  --                                         random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                           do
+  --                                           putStrLn $ show "!=21"
+  --                                           random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                             do
+  --                                             putStrLn $ show "!=22"
+  --                                             random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                               do
+  --                                               putStrLn $ show "!=23"
+  --                                               random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                                 do
+  --                                                 putStrLn $ show "!=24"
+  --                                                 random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                                   do
+  --                                                   putStrLn $ show "!=25"
+  --                                                   random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                                     do
+  --                                                     putStrLn $ show "!=26"
+  --                                                     random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                                       do
+  --                                                       putStrLn $ show "!=27"
+  --                                                       random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                                         do
+  --                                                         putStrLn $ show "!=28"
+  --                                                         random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 12 1 >>= \(sl2_rep,rev_trace) ->
+  --                                                           do
+  --                                                           putStrLn $ show "!=29"
+  --                                                           random_tietze_aux sl2_rep (\rep -> sample_from_rep_2 k2 rep) rev_trace 13 1 >>= \(sl2_rep_obfuscated,rev_trace) ->
+  --                                                             do
+  --                                                             putStrLn $ show pq ++ "\n"
+  --                                                             putStrLn $ foldr (\a b -> show a ++ "\n" ++ b) "" rev_trace
+  --                                                             putStrLn $ show $ fst sl2_rep_obfuscated
+    
   -- construct_group_sampler 10 >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_eval)) ->
   -- putStrLn . show . snd $ sl2_rep_obfuscated
 

@@ -115,7 +115,7 @@ unfold_powers (POW a n)
 unfold_powers (NAME t) = NAME t
 unfold_powers IDENTITY = IDENTITY
 
--- TODO: Something goes wron recursively (fixpoint fixes this)
+-- TODO: Something goes wrong recursively (fixpoint fixes this)
 mult_simplify :: Token -> Token
 mult_simplify (MULT l) =
   MULT (map mult_simplify l >>= \x ->
@@ -253,6 +253,9 @@ find_solution_for_generator s (h:sym) =
   else find_solution_for_generator s sym
 find_solution_for_generator s [] = Nothing
 
+-- TODO: This is the current bottleneck!
+-- TODO: Tail recursion
+-- TODO: Solve for all equalities (on the right side) / Dynamic!
 find_solution_for_generator_token :: Token -> [Token] -> Maybe Token
 find_solution_for_generator_token (NAME s) a = find_solution_for_generator s a
 find_solution_for_generator_token _ _ = Nothing
@@ -299,13 +302,13 @@ remove_subsection_list x (y : ys) =
         Right y' -> Right y'
         Left y' -> Right y'
     Left x' -> remove_subsection_list x' ys
-  
 
 remove_relation :: [Token] -> [Token] -> Maybe (Token,[Token])
+remove_relation [] _ = Nothing
 remove_relation (x : sym') sym =
   let symsubx = filter (not . token_eq x) sym in
   case remove_subsection_list x symsubx of
-    Left _ -> Nothing
+    Left _ -> remove_relation sym' sym
     Right y ->
       if token_eq y IDENTITY
       then Just (x,symsubx)
@@ -313,41 +316,45 @@ remove_relation (x : sym') sym =
 
 -- Representation by strings:
 -- TODO: ADD TRACE
-rep_by_index :: Integer -> ([Token],[Token]) -> IO Token -> Integer -> [Trace] -> IO (([Token],[Token]),[Trace])
+rep_by_index :: Integer -> ([Token],[Token]) -> IO Token -> Integer -> [Trace] -> IO (Maybe (([Token],[Token]),[Trace]))
 rep_by_index 0 (rep,sym) sample_algorithm counter rev_trace =
   sample_algorithm >>= \a ->
   let a' = simple_form_fix a in
   let b = NAME ("gen_" ++ show counter) in
-  return $ ((b : rep, simple_form_fix (MULT [(POW b (-1)) , a']) : sym), ADD_GENERATOR b a' : rev_trace)
+  return $ Just ((b : rep, simple_form_fix (MULT [(POW b (-1)) , a']) : sym), ADD_GENERATOR b a' : rev_trace)
 rep_by_index 1 (rep,sym) sample_algorithm _ rev_trace =
   (randomRIO (0,length rep - 1) >>= \i -> return $ (take i rep ++ drop (i+1) rep, rep !! i)) >>= \(rep',gen) ->
-  let solution = (find_solution_for_generator_token gen sym) in
-    if isJust solution
-    then
-      let sol = (fromJust solution) in 
+  do
+    putStrLn $ " REP - GEN: " ++ "\n " ++ show rep' ++ "\n " ++ show gen
+    return $
+      (find_solution_for_generator_token gen sym) >>= \sol ->
       let sym' = map (simple_form . replace_token_by_token gen sol) sym in
-      return $ ((rep',sym'), REMOVE_GENERATOR gen sol : rev_trace)
-    else return $ ((rep,sym),rev_trace)
+        Just $ ((rep',sym'), REMOVE_GENERATOR gen sol : rev_trace)
 rep_by_index 2 (rep,sym) sample_algorithm _ rev_trace =
   randomRIO (0,length sym - 1) >>= \i ->
   randomRIO (1,160) >>= \n -> -- 160?
   let rel = (POW (sym !! i) n) in
   let sym' = rel : sym in
-  return $ ((rep,sym'), ADD_RELATION rel : rev_trace)
+  return $ Just $ ((rep,sym'), ADD_RELATION rel : rev_trace)
 rep_by_index 3 (rep,sym) sample_algorithm _ rev_trace =
-  let k = remove_relation sym sym in
-    if isJust k
-    then
-      let (rel,sym') = fromJust k
-      in return $ ((rep,sym'), REMOVE_RELATION rel : rev_trace)
-    else
-      return $ ((rep,sym), rev_trace)
-  
+  do
+    putStrLn $ " Length: " ++ show (length sym)
+    return $ 
+      remove_relation sym sym >>= \(rel,sym') -> Just ((rep,sym'), REMOVE_RELATION rel : rev_trace)  
 
-rep_randomizer :: ([Token],[Token]) -> IO Token -> Integer -> [Trace] -> IO (([Token],[Token]),[Trace])
-rep_randomizer (rep,sym) sample_algorithm counter rev_trace =
-  randomRIO (0,3) >>= \r -> -- TODO: (0,3)
-  rep_by_index r (rep,sym) sample_algorithm counter rev_trace
+rep_randomizer :: ([Token],[Token]) -> IO Token -> Integer -> [Trace] -> [Integer] -> IO (([Token],[Token]),[Trace])
+rep_randomizer (rep,sym) sample_algorithm counter rev_trace ban =
+  randomRIO (0,3) >>= \r ->
+  case filter (\x -> r == x) ban of
+      [] -> 
+        do
+          putStrLn $ "Choice: " ++ show r
+          rep_by_index r (rep,sym) sample_algorithm counter rev_trace >>= \i ->
+            if isJust i
+            then return $ fromJust i
+            else rep_randomizer (rep,sym) sample_algorithm counter rev_trace (r : ban)
+      _ ->
+        rep_randomizer (rep,sym) sample_algorithm counter rev_trace ban
 
 find_token_index t [] = -1
 find_token_index t (h : rep) =
@@ -382,10 +389,21 @@ calculate_value_from_trace (ADD_RELATION rel : trace) (rep,sym) value =
   calculate_value_from_trace trace (rep,rel : sym) value
 calculate_value_from_trace (REMOVE_RELATION rel : trace) (rep,sym) value =
   calculate_value_from_trace trace (rep,filter (not . token_eq rel) sym) value
+
+
+
+random_order_aux :: [Token] -> [Token] -> IO [Token]
+random_order_aux [] l' = return l'
+random_order_aux l l' =
+  randomRIO (0 , (length l-1)) >>= \i ->
+  random_order_aux (take i l ++ drop (i+1) l) (l !! i : l')
+
+random_order :: [Token] -> IO [Token]
+random_order l = random_order_aux l []
   
 -- Sample random element using a representation: // TODO: is this correct sampling?
-sample_from_rep :: ([Token],[Token]) -> Integer -> IO Token
-sample_from_rep (rep,sym) pq =
+sample_from_rep :: ([Token],[Token]) -> IO Token
+sample_from_rep (rep,sym) =
   let list_value = [0..(length rep - 1)] >>= \i ->
         return $
         (randomIO :: IO Bool) >>= \e ->
@@ -394,20 +412,25 @@ sample_from_rep (rep,sym) pq =
         else return $ IDENTITY
   in
     (sequence list_value) >>= \l ->
-    return $ MULT l
+    random_order l >>= \l' ->
+    return $ remove_identity $ MULT l'
 
-sample_from_rep_2 :: Integer -> ([Token],[Token]) -> IO Token
-sample_from_rep_2 k (rep,sym) =
-  let list_value = [0..(length rep - 1)] >>= \i ->
-        return $
-        (randomIO :: IO Bool) >>= \b ->
-        if b
-        then randomRIO (1,k) >>= \p -> return $ (POW (rep !! i) p)
-        else return $ IDENTITY
-  in
-    (sequence list_value) >>= \l ->
-    return $ simple_form $ MULT l
+-- sample_from_rep_2 :: Integer -> ([Token],[Token]) -> IO Token
+-- sample_from_rep_2 k (rep,sym) =
+--   let list_value = [0..(length rep - 1)] >>= \i ->
+--         return $
+--         (randomIO :: IO Bool) >>= \b ->
+--         if b
+--         then randomRIO (1,k) >>= \p -> return $ (POW (rep !! i) p)
+--         else return $ IDENTITY
+--   in
+--     (sequence list_value) >>= \l ->
+--     return $ simple_form $ MULT l
 
+sample_from_rep_3 :: Integer -> ([Token],[Token]) -> IO Token
+sample_from_rep_3 k (rep,sym) =
+  sequence ([0 .. 10] >>= \_ -> return $ sample_from_rep (rep,sym)) >>= \l ->
+  sample_from_rep ((l ++ rep),sym)
 
 apply_n_times :: Integer -> (a -> IO a) -> IO a -> IO a
 apply_n_times 0 f v = v
@@ -416,8 +439,9 @@ apply_n_times n f v = apply_n_times (n-1) f v >>= f
 random_tietze_aux :: ([Token],[Token]) -> (([Token],[Token]) -> IO Token) -> [Trace] -> Integer -> Integer -> IO (([Token],[Token]),[Trace])
 random_tietze_aux rep _ rev_trace _ 0 = return (rep,rev_trace)
 random_tietze_aux rep sample rev_trace counter i =
-  rep_randomizer rep (sample rep) counter rev_trace >>= \(rep,rev_trace) ->
-  random_tietze_aux rep sample rev_trace (counter+1) (i-1)
+  do
+    putStrLn $ "\nITERATION: " ++ show i
+    rep_randomizer rep (sample rep) counter rev_trace [] >>= \(rep,rev_trace) -> random_tietze_aux rep sample rev_trace (counter+1) (i-1)
 
 random_tietze :: ([Token],[Token]) -> (([Token],[Token]) -> IO Token) -> Integer -> IO (([Token],[Token]),[Trace])
 random_tietze rep sample i =

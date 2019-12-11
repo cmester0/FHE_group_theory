@@ -7,7 +7,7 @@ import FHE
 import GroupRepresentation
 
 width, height :: Integer
-(width, height) = (10^9, 10^320)  -- 10^110
+(width, height) = (10^1000, 10^1000)  -- 10^110
 
 img_width, img_height :: Int
 (img_width, img_height) = (100, 100)
@@ -58,7 +58,7 @@ calculate_index_i :: Integer -> Integer -> ((Integer,Integer),(Integer,Integer))
 calculate_index_i total i ((x0,x1),(y0,y1)) =
   let x_step = (div (x1 - x0) total) in
   let y_step = (div (y1 - y0) 2) in
-    if i < div total 2
+    if i < total
     then ((x0 + x_step * i,x1 - x_step * (total + 1 - i)),(y0 + y_step,y1))
     else ((x0 + x_step * i,x1 - x_step * (total + 1 - i)),(y0,y1 - y_step))
 
@@ -71,10 +71,10 @@ get_index ((NAME t) : rep) (NAME s) =
 token_pos :: Token -> [Token] -> ((Integer,Integer),(Integer,Integer)) -> ((Integer,Integer),(Integer,Integer))
 token_pos (POW (NAME s) (-1)) rep ranges =
   let len = toInteger $ length rep in
-  calculate_index_i (2 * len) ((get_index rep (NAME s)) + len) ranges
+  calculate_index_i len ((get_index rep (NAME s)) + len) ranges
 token_pos (NAME s) rep ranges =
   let len = toInteger $ length rep in
-  calculate_index_i (2 * len) ((get_index rep (NAME s))) ranges
+  calculate_index_i len ((get_index rep (NAME s))) ranges
 token_pos (MULT l) rep ranges =
   foldr (\v b -> token_pos v rep b) ranges l
 token_pos (POW a 0) rep ranges = ranges
@@ -108,7 +108,7 @@ group_rep_pos_list_obfuscated k =
 group_rep_pos_list_obfuscated_random :: Integer -> IO [((Integer,Integer),(Integer,Integer))]
 group_rep_pos_list_obfuscated_random k =
   construct_group_sampler k >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi)) ->
-  sequence ([0..10] >>= \_ -> return $ sample_G) >>= \sym ->
+  sequence ([0..500] >>= \_ -> return $ sample_K) >>= \sym ->
   let largest = foldr (\a b -> if a > b then a else b) 0 (map token_length sym) in  
   return $ map (\a -> token_pos (unroll_powers a) (fst sl2_rep_obfuscated) ((0,width),(0,height))) sym
   

@@ -1,5 +1,5 @@
 run:
-	ghc --make *.hs -O3
+	ghc --make *.hs -O2 -fexpose-all-unfoldings -fasm -fforce-recomp -v0  -funbox-strict-fields -optc-O3 -optc-march=core2 -auto-all -caf-all
 	./examples
 
 run_group:
