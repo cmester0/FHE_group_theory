@@ -7,7 +7,7 @@ import FHE
 import GroupRepresentation
 
 width, height :: Integer
-(width, height) = (10^1000, 10^1000)  -- 10^110
+(width, height) = (2^31, 2^31)  -- 10^110
 
 img_width, img_height :: Int
 (img_width, img_height) = (100, 100)
@@ -26,7 +26,7 @@ pixelRenderer l x y =
                    ((convert_y y) <= ay0 && ay0 <= (convert_y (y+1)))))
                || b)
      False l
-  then PixelRGBA8 (fromIntegral x) (fromIntegral y) 255 128
+  then PixelRGBA8 (fromIntegral x) (fromIntegral y) 255 16
   else PixelRGBA8 0 0 0 0
 
 token_length :: Token -> Integer
@@ -54,75 +54,51 @@ unroll_powers (POW a n)
 unroll_powers (NAME t) = NAME t
 unroll_powers IDENTITY = IDENTITY
 
-calculate_index_i :: Integer -> Integer -> ((Integer,Integer),(Integer,Integer)) -> ((Integer,Integer),(Integer,Integer))
-calculate_index_i total i ((x0,x1),(y0,y1)) =
-  let x_step = (div (x1 - x0) total) in
-  let y_step = (div (y1 - y0) 2) in
-    if i < total
-    then ((x0 + x_step * i,x1 - x_step * (total + 1 - i)),(y0 + y_step,y1))
-    else ((x0 + x_step * i,x1 - x_step * (total + 1 - i)),(y0,y1 - y_step))
+matrix_pos :: [[Integer]] -> ((Integer,Integer),(Integer,Integer))
+matrix_pos [[a,b],[c,d]] = ((min a d,max a d),(min b c,max b c))
 
-get_index :: [Token] -> Token -> Integer
-get_index ((NAME t) : rep) (NAME s) =
-  if t == s
-  then 0
-  else get_index rep (NAME s) + 1
+-- group_rep_pos_list :: Integer -> IO [((Integer,Integer),(Integer,Integer))]
+-- group_rep_pos_list k =
+--   generate_group_rep k ("x","y","z","w") >>= \(sl2_rep,pq,matrix) ->
+--   return $ map (\a -> matrix_pos (eval a) ((0,width),(0,height))) (snd sl2_rep)
 
-token_pos :: Token -> [Token] -> ((Integer,Integer),(Integer,Integer)) -> ((Integer,Integer),(Integer,Integer))
-token_pos (POW (NAME s) (-1)) rep ranges =
-  let len = toInteger $ length rep in
-  calculate_index_i len ((get_index rep (NAME s)) + len) ranges
-token_pos (NAME s) rep ranges =
-  let len = toInteger $ length rep in
-  calculate_index_i len ((get_index rep (NAME s))) ranges
-token_pos (MULT l) rep ranges =
-  foldr (\v b -> token_pos v rep b) ranges l
-token_pos (POW a 0) rep ranges = ranges
-token_pos (POW (MULT l) n) rep ranges
-  | n > 0 = token_pos (MULT (concat $ take (fromInteger n) $ repeat l)) rep ranges
-  | n < 0 = token_pos (MULT (concat $ take (fromInteger (-n)) $ repeat (reverse l >>= \x -> return $ POW x (-1)))) rep ranges
--- token_pos (POW (NAME s) n) rep ranges | n < 0 = ranges
-token_pos (POW (NAME s) n) rep ranges | n > 0 =
-  token_pos (MULT (take (fromInteger n) $ repeat (NAME s))) rep ranges
-token_pos (POW IDENTITY n) rep ranges = ranges
-token_pos (POW (POW a n) m) rep ranges = token_pos (POW a (n*m)) rep ranges
-token_pos (IDENTITY) rep ranges = ranges
+-- renderTokens :: String -> IO ()
+-- renderTokens name =
+--   (group_rep_pos_list 160) >>= \l ->
+--   writePng ("output/" ++ name) $ generateImage (pixelRenderer l) img_width img_height
 
-group_rep_pos_list :: Integer -> IO [((Integer,Integer),(Integer,Integer))]
-group_rep_pos_list k =
-  generate_group_rep k ("x","y","z","w") >>= \(sl2_rep,pq,matrix) ->
-  let largest = foldr (\a b -> if a > b then a else b) 0 (map token_length (snd sl2_rep)) in
-  return $ map (\a -> token_pos (unroll_powers a) (fst sl2_rep) ((0,width),(0,height))) (snd sl2_rep)
-
-renderTokens :: String -> IO ()
-renderTokens name =
-  (group_rep_pos_list 160) >>= \l ->
-  writePng ("output/" ++ name) $ generateImage (pixelRenderer l) img_width img_height
-
-group_rep_pos_list_obfuscated :: Integer -> IO [((Integer,Integer),(Integer,Integer))]
-group_rep_pos_list_obfuscated k =
-  construct_group_sampler k >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi)) ->
-  let largest = foldr (\a b -> if a > b then a else b) 0 (map token_length (snd sl2_rep_obfuscated)) in  
-  return $ map (\a -> token_pos (unroll_powers a) (fst sl2_rep_obfuscated) ((0,width),(0,height))) (snd sl2_rep_obfuscated)
+-- group_rep_pos_list_obfuscated :: Integer -> IO [((Integer,Integer),(Integer,Integer))]
+-- group_rep_pos_list_obfuscated k =
+--   construct_group_sampler k >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi)) ->
+--   return $ map (\a -> matrix_pos  ((0,width),(0,height))) (map pi (snd sl2_rep_obfuscated))
 
 group_rep_pos_list_obfuscated_random :: Integer -> IO [((Integer,Integer),(Integer,Integer))]
 group_rep_pos_list_obfuscated_random k =
   construct_group_sampler k >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi)) ->
-  sequence ([0..500] >>= \_ -> return $ sample_K) >>= \sym ->
-  let largest = foldr (\a b -> if a > b then a else b) 0 (map token_length sym) in  
-  return $ map (\a -> token_pos (unroll_powers a) (fst sl2_rep_obfuscated) ((0,width),(0,height))) sym
+  sequence ([0] >>= \_ -> return $ sample_G) >>= \sym ->
+  sequence $ map (\a ->
+                  case a of
+                    Left x ->
+                      do
+                        putStrLn x
+                        return ((0,width),(0,height))
+                    Right x ->
+                      let res = matrix_pos x in
+                        do
+                          putStrLn . show $ res
+                          return res) (map pi sym)
   
-renderTokensObfuscated :: String -> IO ()
-renderTokensObfuscated name =
-  group_rep_pos_list_obfuscated 160 >>= \l ->
-  do
-    putStrLn . show $ l
-    writePng ("output/" ++ name) $ generateImage (pixelRenderer l) img_width img_height
-    putStrLn . show $ "DONE"
+-- renderTokensObfuscated :: String -> IO ()
+-- renderTokensObfuscated name =
+--   group_rep_pos_list_obfuscated 160 >>= \l ->
+--   do
+--     putStrLn . show $ l
+--     writePng ("output/" ++ name) $ generateImage (pixelRenderer l) img_width img_height
+--     putStrLn . show $ "DONE"
 
 renderRandomTokensObfuscated :: String -> IO ()
 renderRandomTokensObfuscated name =
-  group_rep_pos_list_obfuscated_random 10 >>= \l ->
+  group_rep_pos_list_obfuscated_random 30 >>= \l ->
   do
     -- putStrLn . show $ l
     putStrLn . show $ "START"

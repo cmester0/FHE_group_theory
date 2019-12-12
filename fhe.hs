@@ -71,7 +71,7 @@ product_representation (s,r) (t,q) = (s ++ t, r ++ q ++ group_commutor s t)
 
 construct_group_sampler :: Integer -> IO ((([Token],[Token]), IO Token, IO Token), (Token -> Either String Bool, Token -> Either String [[Integer]])) -- TODO: Replace integer with bool!
 construct_group_sampler k =
-  let k2 = 1 in
+  let k2 = 50 in
   let k3 = k in
   generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,pq1,matrix1) ->
   generate_group_rep k ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,_,_) ->
