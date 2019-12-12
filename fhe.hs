@@ -13,16 +13,16 @@ import Data.Maybe
    ------------------------------
 
 token_commutator :: Token -> Token -> Token
-token_commutator a b =  MULT [a , b , (a `POW` (-1)) , (b `POW` (-1))]
+token_commutator a b =  MULT [a , b , INVERSE a , INVERSE b]
 
 token_and_operation :: IO Token -> (Token,Token) -> (Token,Token) -> IO (Token,Token)
 token_and_operation sample (a1,a2) (b1,b2) =
   sample >>= \z ->
-  return (token_commutator (MULT [z , a1 , (z `POW` (-1))]) b1,
-          token_commutator (MULT [z , a2 , (z `POW` (-1))]) b2)
+  return (token_commutator (MULT [z , a1 , INVERSE z]) b1,
+          token_commutator (MULT [z , a2 , INVERSE z]) b2)
 
 token_not_operation :: (Token,Token) -> (Token,Token)
-token_not_operation (a1,a2) = (MULT [(a1 `POW` (-1)) , a2], a2)
+token_not_operation (a1,a2) = (MULT [INVERSE a1 , a2], a2)
 
    ---------------------------
    -- Encoding and Decoding --
@@ -105,21 +105,18 @@ construct_FHE k =
 
 testEquationSolver =
   putStrLn $
-  let val = MULT [(NAME "c") , (NAME "a") , (POW (NAME "a") (-2)) , (NAME "b")] in
+  let val = MULT [(NAME "c") , (NAME "a") , (INVERSE (NAME "a")), (INVERSE (NAME "a")) , (NAME "b")] in
   "Pure: " ++ show val ++ "\n" ++
-  "Normal: " ++ show (normal_form val) ++ "\n" ++
-  "MoveL: " ++ show (move_to_rhs_aux "a" (normal_form val) IDENTITY) ++ "\n" ++
-  "Flip: " ++ show (normal_form $ POW val (-1)) ++ "\n" ++
-  "MoveR: " ++ show (move_to_rhs_aux "a" (normal_form $ POW val (-1)) IDENTITY) ++ "\n" ++
-  "FlipFlip: " ++ show (normal_form $ POW (normal_form $ POW val (-1)) (-1)) ++ "\n" ++
-  "Rem?: " ++ show (move_to_rhs "a" (normal_form val) IDENTITY) ++ "\n" ++
-  "Rem: " ++ show (remove_tokens "a" (normal_form val)) ++ "\n" ++
-  "Pure Col: " ++ show (collapse val) ++ "\n" ++
-  "Rem Col: " ++ show (collapse (remove_tokens "a" (normal_form val))) ++ "\n" ++
-  "Rem Col_fix: " ++ show (collapse_fix . (remove_tokens "a") .  normal_form $ val) ++ "\n" ++
-  "Solveable: " ++ show (solvable "a" val) ++ "\n" ++
-  "Solution: " ++ show (solve_for_token "a" val) ++ "\n" ++
-  "Find generator: " ++ show (find_solution_for_generator "a" [val])
+  "Normal: " ++ show (normal_form [] val) ++ "\n" ++
+  "MoveL: " ++ show (move_to_rhs_aux "a" (normal_form [] val) IDENTITY) ++ "\n" ++
+  "Flip: " ++ show (normal_form [] $ INVERSE val) ++ "\n" ++
+  "MoveR: " ++ show (move_to_rhs_aux "a" (normal_form [] $ INVERSE val) IDENTITY) ++ "\n" ++
+  "FlipFlip: " ++ show (normal_form [] $ INVERSE (normal_form [] $ INVERSE val)) ++ "\n" ++
+  "Rem?: " ++ show (move_to_rhs [] "a" (normal_form [] val) IDENTITY) ++ "\n" ++
+  "Rem: " ++ show (remove_tokens [] "a" (normal_form [] val)) ++ "\n" ++
+  "Solveable: " ++ show (solvable [] "a" val) ++ "\n" ++
+  "Solution: " ++ show (solve_for_token [] "a" val) ++ "\n" ++
+  "Find generator: " ++ show (find_solution_for_generator [] "a" [val])
     
 testEncodeZeroAndOne k =
   construct_group_sampler k >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi)) ->

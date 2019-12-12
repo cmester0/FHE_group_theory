@@ -33,26 +33,7 @@ token_length :: Token -> Integer
 token_length (IDENTITY) = 1
 token_length (NAME s) = 1
 token_length (MULT l) = foldr (+) 0 $ map token_length l
-token_length (POW a n) = token_length a * (abs n)
-
-unroll_powers :: Token -> Token
-unroll_powers (POW a 0) = IDENTITY
-unroll_powers (POW a 1) = unroll_powers a
-unroll_powers (MULT l) = MULT (map unroll_powers l)
-unroll_powers (POW (POW a m) n) = unroll_powers (POW (unroll_powers a) (m+n))
-unroll_powers (POW a (-1)) = POW (unroll_powers a) (-1)
-unroll_powers (POW (MULT l) n) | n < 0 =
-  let inversal = (reverse l >>= \x -> return $ POW (unroll_powers x) (-1)) in
-  unroll_powers $
-  MULT (concat $ take (fromInteger (-n)) $ repeat inversal)
-unroll_powers (POW (MULT l) n) | n > 0 =   
-  unroll_powers $
-  MULT (concat $ take (fromInteger n) $ repeat l)
-unroll_powers (POW a n)
-  | n > 0 = MULT (take (fromInteger n) $ repeat $ unroll_powers a)
-  | n < 0 = MULT (take (fromInteger (-n)) $ repeat $ POW (unroll_powers a) (-1))
-unroll_powers (NAME t) = NAME t
-unroll_powers IDENTITY = IDENTITY
+token_length (INVERSE a) = token_length a
 
 matrix_pos :: [[Integer]] -> ((Integer,Integer),(Integer,Integer))
 matrix_pos [[a,b],[c,d]] = ((min a d,max a d),(min b c,max b c))

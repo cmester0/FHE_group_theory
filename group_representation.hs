@@ -23,16 +23,93 @@ fq k = large_prime k
 data Token =
   NAME String
   | MULT [Token] -- Rewrite to list of tokens! (generalize)
-  | POW Token Integer
+  | INVERSE Token
   | IDENTITY
   -- deriving Show
 instance Show Token where
   show (NAME s) = s
   show (MULT []) = "EMPTY"
   show (MULT (x : xr)) = "(" ++ (foldr (\a b -> b ++ "*" ++ show a) (show x) (reverse xr)) ++ ")"
-  show (POW a n) = "(" ++ show a ++ ")^" ++ "(" ++ show n ++ ")"
+  show (INVERSE a) = show a ++ "^-1"
   show (IDENTITY) = "I"
 
+mult_pow :: Token -> Integer -> [Token]
+mult_pow a n | n > 0 = take (fromInteger n) $ repeat a
+mult_pow a n | n < 0 = take (fromInteger (-n)) $ repeat (INVERSE a)
+mult_pow a 0 = []
+
+pow a 0 = IDENTITY
+pow a 1 = a
+pow a (-1) = INVERSE a
+pow a n = MULT $ mult_pow a n
+
+-- Remove subsection by all other things in symbols:
+remove_subsection :: Token -> Token -> Either Token Token
+remove_subsection (MULT l) a =
+  if token_eq a (MULT l)
+  then Right IDENTITY
+  else 
+    let (change,tokens) = unzip (map (\x -> remove_subsection x a) l >>= \x ->
+                                    case x of
+                                      Left b -> return (False,b)
+                                      Right b -> return (True,b))
+    in
+      if foldr (||) False change
+      then Right $ MULT tokens
+      else Left $ MULT tokens
+remove_subsection (INVERSE a) b =
+  if token_eq (INVERSE a) b
+  then Right IDENTITY
+  else
+    case remove_subsection a b of
+      Left c -> Left $ INVERSE c
+      Right c -> Right $ INVERSE c
+remove_subsection x a =
+  if token_eq x a
+  then Right IDENTITY
+  else Left x
+
+remove_subsection_list :: Token -> [Token] -> Either Token Token
+remove_subsection_list x [] = Left x
+remove_subsection_list x (y : ys) =
+  case remove_subsection x y of
+    Right x' ->
+      case remove_subsection_list x' ys of
+        Right y' -> Right y'
+        Left y' -> Right y'
+    Left x' -> remove_subsection_list x' ys
+
+
+remove_x_inv_x a [] = [a]
+remove_x_inv_x (INVERSE a) (b : xs) =
+  if token_eq a b
+  then remove_x_inv_x (head xs) (tail xs)
+  else (INVERSE a) : remove_x_inv_x b xs
+remove_x_inv_x a (INVERSE b : xs) =
+  if token_eq a b
+  then remove_x_inv_x (head xs) (tail xs)
+  else a : remove_x_inv_x (INVERSE b) xs
+remove_x_inv_x a (b : xs) = a : remove_x_inv_x b xs
+  
+-- Knuth Bendix algorithm
+knuth_bendix :: Token -> Token
+knuth_bendix (MULT l) =
+  let remove_ident = filter (\a -> case a of
+                                IDENTITY -> False
+                                _ -> True) in
+  let remove_inv = \l -> remove_x_inv_x (head l) (tail l) in
+    MULT (remove_ident . remove_inv $ l)
+knuth_bendix (INVERSE (MULT l)) = MULT . map (INVERSE) . reverse $ l
+knuth_bendix (INVERSE (INVERSE a)) = knuth_bendix a
+knuth_bendix (INVERSE IDENTITY) = IDENTITY
+knuth_bendix t = t
+
+normal_form sym x =
+  case remove_subsection_list x sym of
+    Left x -> knuth_bendix x
+    Right x -> knuth_bendix x
+
+-- Create representation
 base4 :: Integer -> [Integer]
 base4 m =
   if m < 4
@@ -45,8 +122,8 @@ sl2_fq_rep_sym (p,q,pq) (su,st,sh2,sh) =
     
   let e = \cu m ch2 ->
         let b4 = base4 m in
-        let cuf = b4 >>= \(m_at_i) -> return $ MULT [(cu `POW` m_at_i) , (ch2 `POW` (-1))] in
-          MULT (cuf ++ [ch2 `POW` toInteger (length b4)])
+        let cuf = b4 >>= \(m_at_i) -> return $ MULT $ cu `mult_pow` m_at_i ++ [INVERSE ch2] in
+          cuf ++ ch2 `mult_pow` toInteger (length b4)
   in
   let u = [[1,1],[0,1]] in
   let t = [[0,1],[-1,0]] in
@@ -58,19 +135,18 @@ sl2_fq_rep_sym (p,q,pq) (su,st,sh2,sh) =
   let ch2 = NAME sh2 in
   let ch = NAME sh in
 
-  let ceuj = e cu (j ^ 2) ch2 in 
   let ceinvh2 = e cu (inverse pq 2) ch2 in
-  let ceuinvh2 = e cu (inverse pq j) ch2 in
   let ceujh2 = e cu j ch2 in
+  let ceuinvjh2 = e cu (inverse pq j) ch2 in
     
-  let r = [e cu p ch2,
-           MULT [(ch2 `POW` (-1)) , cu , ch2 , (cu `POW` (-4))],
-           MULT [(ch `POW` (-1)) , cu , ch , ((e cu (j ^ 2) ch2) `POW` (-1))],
-           MULT [(ct `POW` 2)  ,  cu  ,  ((ct `POW` 2)  `POW` (-1))  ,  (cu `POW` (-1))],
-           MULT [(ct `POW` (-1)) , ch , ct , ch],
-           MULT [(ct `POW` (-1)) , cu , (ct `POW` (-1)) , cu , ct , cu],
-           MULT [(ct `POW` (-1)) , (ch2 `POW` (-1)) , ceinvh2 , (ct `POW` (-1)) , (cu `POW` 2) , ct , ceinvh2],
-           MULT [(ct `POW` (-1)) , (ch `POW` (-1)) , (e cu (inverse pq j) ch2) , (ct `POW` (-1)) , (e cu j ch2) , ct , (e cu (inverse pq j) ch2)]] in
+  let r = [MULT (e cu p ch2),
+           MULT $ [INVERSE ch2 , cu , ch2 , INVERSE cu, INVERSE cu, INVERSE cu, INVERSE cu],
+           MULT $ [INVERSE ch , cu , ch ] ++ (map (INVERSE) $ reverse $ e cu (j ^ 2) ch2),
+           MULT $  [ct , ct  ,  cu  ,  INVERSE ct , INVERSE ct  ,  INVERSE cu],
+           MULT $ [INVERSE ct , ch , ct , ch],
+           MULT $ [INVERSE ct , cu , INVERSE ct , cu , ct , cu],
+           MULT $ [INVERSE ct , INVERSE ch2] ++ ceinvh2 ++ [INVERSE ct , cu , cu , ct ] ++ ceinvh2,
+           MULT $ [INVERSE ct , INVERSE ch ] ++ ceuinvjh2 ++ [ INVERSE ct ] ++ ceujh2 ++ [ ct ] ++ ceuinvjh2] in
     
   return (([cu,ct,ch2,ch],r),[u,t,h2,h])
 
@@ -87,150 +163,63 @@ evaluate dict pq (MULT (x : xr)) =
   evaluate dict pq x >>= \mx ->
   evaluate dict pq (MULT xr) >>= \mxr ->
   Right $ matrix_mult pq mx mxr
-evaluate dict pq (POW a b) =
+evaluate dict pq (INVERSE a) =
   (evaluate dict pq a) >>= \ma ->
-  Right $ matrix_pow pq ma b
+  Right $ matrix_inverse pq ma
 evaluate _ _ IDENTITY = Right identity
 evaluate dict pq (NAME s) = lookup_in_list (NAME s) dict
 
 token_eq :: Token -> Token -> Bool
 token_eq (MULT l0) (MULT l1) =
   foldr (\(a,b) r -> token_eq a b && r) True (zip l0 l1)
-token_eq (POW a b) (POW c d) = token_eq a c && b == d
+token_eq (INVERSE a) (INVERSE b) = token_eq a b
 token_eq (IDENTITY) (IDENTITY) = True
 token_eq (NAME a) (NAME b) = a == b
 token_eq _ _ = False
-
-unfold_powers :: Token -> Token
-unfold_powers (MULT l) =
-  MULT (map unfold_powers l)
-unfold_powers (POW (MULT l) (-1)) = MULT (reverse l >>= \x -> return $ POW x (-1))
-unfold_powers (POW (POW a n) m) = unfold_powers $ POW (unfold_powers a) (n * m)
-unfold_powers (POW a (-1)) = POW (unfold_powers a) (-1)
-unfold_powers (POW a 1) = unfold_powers a
-unfold_powers (POW a 0) = IDENTITY
-unfold_powers (POW a n)
-  | n < 0 = MULT (take (fromInteger (-n)) $ repeat (POW (unfold_powers a) (-1)))
-  | n > 0 = MULT (take (fromInteger n) $ repeat (unfold_powers a))
-unfold_powers (NAME t) = NAME t
-unfold_powers IDENTITY = IDENTITY
-
--- TODO: Something goes wrong recursively (fixpoint fixes this)
-mult_simplify :: Token -> Token
-mult_simplify (MULT l) =
-  MULT (map mult_simplify l >>= \x ->
-           case x of
-             MULT k -> map mult_simplify k
-             v -> return $ mult_simplify v)
-mult_simplify (POW v n) =  POW (mult_simplify v) n
-mult_simplify v = v
-
-mult_simplify_fix a =
-  let ma = mult_simplify a in
-    if token_eq ma a
-    then ma
-    else mult_simplify_fix ma
-
-remove_identity (MULT l) =
-  MULT (map remove_identity (filter (not . token_eq IDENTITY) l))
-remove_identity (POW IDENTITY n) = IDENTITY
-remove_identity (POW a 0) = IDENTITY
-remove_identity (POW a n) = POW (remove_identity a) n
-remove_identity t = t
-
-remove_identity_fix a =
-  let ra = remove_identity a in
-    if token_eq ra a
-    then ra
-    else remove_identity_fix ra
-
-normal_form_aux = remove_identity_fix . mult_simplify_fix . unfold_powers
-normal_form a =
-  let na = normal_form_aux a in
-    if token_eq na a
-    then na
-    else normal_form na
-
-reduced :: String -> Token -> Bool
-reduced s (NAME t) = t == s
-reduced s (POW t 1) = reduced s t
-reduced s (POW t (-1)) = reduced s t
-reduced s a = False
-
-collapse :: Token -> Token
-collapse (MULT (NAME s : NAME t : xr)) | s == t =
-  collapse $ MULT $ POW (NAME s) 2 : xr
-collapse (MULT (POW (NAME s) n : NAME t : xr)) | s == t =
-  collapse $ MULT $ POW (NAME s) (n+1) : xr
-collapse (MULT (NAME s : POW (NAME t) m : xr)) | s == t =
-  collapse $ MULT $ POW (NAME s) (m+1) : xr
-collapse (MULT (POW (NAME s) n : POW (NAME t) m : xr)) | s == t =
-  collapse $ MULT $ POW (NAME s) (n+m) : xr
-collapse (MULT (a : b : xr)) =
-  MULT [collapse a, collapse $ MULT $ b : xr]
-collapse (MULT [x]) = collapse x
-collapse (MULT []) = IDENTITY
-collapse (POW a 0) = IDENTITY
-collapse (POW a n) = POW (collapse a) n
-collapse (NAME a) = NAME a
-collapse IDENTITY = IDENTITY
-
-collapse_fix a =
-  let ca = collapse a in
-  if token_eq ca a
-  then a
-  else collapse_fix ca
-
-simple_form =
-  -- mult_simplify_fix . collapse_fix . 
-  remove_identity_fix . mult_simplify_fix
-
-simple_form_fix a =
-  let sa = simple_form a in
-  if token_eq sa a
-  then a
-  else simple_form_fix sa
-
 
 move_to_rhs_aux :: String -> Token -> Token -> (Token,Token)
 move_to_rhs_aux s (MULT ((NAME t) : xr)) rhs =
   if t == s
   then (MULT ((NAME t) : xr), rhs)
-  else move_to_rhs_aux s (MULT xr) (MULT [(POW (NAME t) (-1)) , rhs])
+  else move_to_rhs_aux s (MULT xr) (MULT [INVERSE (NAME t) , rhs])
 move_to_rhs_aux s (NAME t) rhs =
   if s == t
   then (NAME t,rhs)
-  else (IDENTITY,MULT [POW (NAME t) (-1) , rhs])
+  else (IDENTITY,MULT [INVERSE (NAME t) , rhs])
 move_to_rhs_aux s (MULT (x : xr)) rhs =
   let (ra,rhs') = move_to_rhs_aux s x rhs in
   if token_eq ra IDENTITY
   then move_to_rhs_aux s (MULT xr) rhs'
   else (MULT (ra : xr),rhs')
-move_to_rhs_aux s (POW (NAME t) n) rhs =
+move_to_rhs_aux s (INVERSE (NAME t)) rhs =
   if t == s
-  then (POW (NAME t) n,rhs)
-  else (IDENTITY, MULT [POW (NAME t) (-n) , rhs])
+  then (INVERSE (NAME t),rhs)
+  else (IDENTITY, MULT [NAME t , rhs])
 move_to_rhs_aux s a rhs = (a,rhs)
 
-move_to_rhs :: String -> Token -> Token -> (Token,Token)
-move_to_rhs s t rhs =
+move_to_rhs :: [Token] -> String -> Token -> Token -> (Token,Token)
+move_to_rhs sym s t rhs =
   let (x,rhs') = (move_to_rhs_aux s t rhs) in
-  let flip = \v -> normal_form (POW v (-1)) in 
+  let flip = \v -> normal_form sym (INVERSE v) in 
   let (y,rhs'') = move_to_rhs_aux s (flip x) (flip rhs') in
-    (flip y , normal_form $ flip rhs'')
+    (flip y , normal_form sym $ flip rhs'')
 
-remove_tokens :: String -> Token -> Token
-remove_tokens s t = normal_form . fst $ move_to_rhs s t IDENTITY
+remove_tokens :: [Token] -> String -> Token -> Token
+remove_tokens sym s t = (normal_form sym) . fst $ move_to_rhs sym s t IDENTITY
+
+reduced s (INVERSE t) = reduced s t
+reduced s (NAME t) = s == t
+reduced s _ = False
   
-solvable :: String -> Token -> Bool
-solvable s = (reduced s) . collapse_fix . (remove_tokens s) . normal_form
+solvable :: [Token] -> String -> Token -> Bool
+solvable sym s = (reduced s) . (normal_form sym)
 
-solve_for_token :: String -> Token -> Token
-solve_for_token s t =
-  let (rest,rhs) = move_to_rhs s (normal_form t) IDENTITY in
-  if token_eq (collapse_fix rest) (NAME s)
-  then collapse_fix $ rhs
-  else collapse_fix $ POW rhs (-1)
+solve_for_token :: [Token] -> String -> Token -> Token
+solve_for_token sym s t =
+  let (rest,rhs) = move_to_rhs sym s (normal_form sym t) IDENTITY in
+  if token_eq (normal_form sym rest) (NAME s)
+  then normal_form sym $ rhs
+  else normal_form sym $ INVERSE rhs
   
 replace_name_by_token :: String -> Token -> Token -> Token
 replace_name_by_token s a (NAME t) =
@@ -239,25 +228,25 @@ replace_name_by_token s a (NAME t) =
   else (NAME t)
 replace_name_by_token s a (MULT l) =
   MULT (map (replace_name_by_token s a) l)
-replace_name_by_token s a (POW b n) =
-  POW (replace_name_by_token s a b) n
+replace_name_by_token s a (INVERSE b) =
+  INVERSE (replace_name_by_token s a b)
 replace_name_by_token s a (IDENTITY) = IDENTITY
 
 replace_token_by_token :: Token -> Token -> Token -> Token
 replace_token_by_token (NAME t) a b = replace_name_by_token t a b
   
-find_solution_for_generator :: String -> [Token] -> Maybe Token
-find_solution_for_generator s (h:sym) =
-  if solvable s h
-  then Just $ solve_for_token s h
-  else find_solution_for_generator s sym
-find_solution_for_generator s [] = Nothing
+find_solution_for_generator :: [Token] -> String -> [Token] -> Maybe Token
+find_solution_for_generator sym s (h:hs) =
+  if solvable sym s h
+  then Just $ solve_for_token sym s h
+  else find_solution_for_generator sym s hs
+find_solution_for_generator _ _ [] = Nothing
 
 -- TODO: This is the current bottleneck!
 -- TODO: Tail recursion
 -- TODO: Solve for all equalities (on the right side) / Dynamic!
 find_solution_for_generator_token :: Token -> [Token] -> Maybe Token
-find_solution_for_generator_token (NAME s) a = find_solution_for_generator s a
+find_solution_for_generator_token (NAME s) sym = find_solution_for_generator sym s sym
 find_solution_for_generator_token _ _ = Nothing
 
 data Trace =
@@ -266,42 +255,6 @@ data Trace =
   | ADD_RELATION Token
   | REMOVE_RELATION Token
   deriving Show
-
--- Remove subsection by all other things in symbols:
-remove_subsection :: Token -> Token -> Either Token Token
-remove_subsection (MULT l) a =
-  if token_eq a (MULT l)
-  then Right IDENTITY
-  else 
-    let (change,tokens) = unzip (map (\x -> remove_subsection x a) l >>= \x ->
-                                    case x of
-                                      Left b -> return (False,b)
-                                      Right b -> return (True,b))
-    in
-      if foldr (||) False change
-      then Right $ MULT tokens
-      else Left $ MULT tokens
-remove_subsection (POW a n) b =
-  if token_eq (POW a n) b
-  then Right IDENTITY
-  else
-    case remove_subsection a b of
-      Left c -> Left $ POW c n
-      Right c -> Right $ POW c n
-remove_subsection x a =
-  if token_eq x a
-  then Right IDENTITY
-  else Left x
-
-remove_subsection_list :: Token -> [Token] -> Either Token Token
-remove_subsection_list x [] = Left x
-remove_subsection_list x (y : ys) =
-  case remove_subsection x y of
-    Right x' ->
-      case remove_subsection_list x' ys of
-        Right y' -> Right y'
-        Left y' -> Right y'
-    Left x' -> remove_subsection_list x' ys
 
 remove_relation :: [Token] -> [Token] -> Maybe (Token,[Token])
 remove_relation [] _ = Nothing
@@ -319,21 +272,21 @@ remove_relation (x : sym') sym =
 rep_by_index :: Integer -> ([Token],[Token]) -> IO Token -> Integer -> [Trace] -> IO (Maybe (([Token],[Token]),[Trace]))
 rep_by_index 0 (rep,sym) sample_algorithm counter rev_trace =
   sample_algorithm >>= \a ->
-  let a' = simple_form_fix a in
+  let a' = normal_form sym a in
   let b = NAME ("gen_" ++ show counter) in
-  return $ Just ((b : rep, simple_form_fix (MULT [(POW b (-1)) , a']) : sym), ADD_GENERATOR b a' : rev_trace)
+  return $ Just ((b : rep, normal_form sym (MULT [INVERSE b , a']) : sym), ADD_GENERATOR b a' : rev_trace)
 rep_by_index 1 (rep,sym) sample_algorithm _ rev_trace =
   (randomRIO (0,length rep - 1) >>= \i -> return $ (take i rep ++ drop (i+1) rep, rep !! i)) >>= \(rep',gen) ->
   do
     putStrLn $ " REP - GEN: " ++ "\n " ++ show rep' ++ "\n " ++ show gen
     return $
       (find_solution_for_generator_token gen sym) >>= \sol ->
-      let sym' = map (simple_form . replace_token_by_token gen sol) sym in
+      let sym' = map ((normal_form sym) . replace_token_by_token gen sol) sym in
         Just $ ((rep',sym'), REMOVE_GENERATOR gen sol : rev_trace)
 rep_by_index 2 (rep,sym) sample_algorithm _ rev_trace =
   randomRIO (0,length sym - 1) >>= \i ->
   randomRIO (1,160) >>= \n -> -- 160?
-  let rel = (POW (sym !! i) n) in
+  let rel = (pow (sym !! i) n) in
   let sym' = rel : sym in
   return $ Just $ ((rep,sym'), ADD_RELATION rel : rev_trace)
 rep_by_index 3 (rep,sym) sample_algorithm _ rev_trace =
@@ -390,8 +343,6 @@ calculate_value_from_trace (ADD_RELATION rel : trace) (rep,sym) value =
 calculate_value_from_trace (REMOVE_RELATION rel : trace) (rep,sym) value =
   calculate_value_from_trace trace (rep,filter (not . token_eq rel) sym) value
 
-
-
 random_order_aux :: [Token] -> [Token] -> IO [Token]
 random_order_aux [] l' = return l'
 random_order_aux l l' =
@@ -413,19 +364,7 @@ sample_from_rep (rep,sym) =
   in
     (sequence list_value) >>= \l ->
     random_order l >>= \l' ->
-    return $ remove_identity $ MULT l'
-
--- sample_from_rep_2 :: Integer -> ([Token],[Token]) -> IO Token
--- sample_from_rep_2 k (rep,sym) =
---   let list_value = [0..(length rep - 1)] >>= \i ->
---         return $
---         (randomIO :: IO Bool) >>= \b ->
---         if b
---         then randomRIO (1,k) >>= \p -> return $ (POW (rep !! i) p)
---         else return $ IDENTITY
---   in
---     (sequence list_value) >>= \l ->
---     return $ simple_form $ MULT l
+    return $ normal_form sym $ MULT l'
 
 sample_from_rep_3 :: Integer -> ([Token],[Token]) -> IO Token
 sample_from_rep_3 k (rep,sym) =

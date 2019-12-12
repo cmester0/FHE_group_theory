@@ -89,7 +89,7 @@ main =
   --   putStrLn . show $ (abs x)
   --   renderTokensObfuscated $ (show . abs $ x) ++ ".png"
   
-  loop renderRandomTokensObfuscated 1000
+  -- loop renderRandomTokensObfuscated 1000
   
   -- putStrLn $
   -- (show . mult_simplify_fix $ MULT [POW (NAME "a") (-1), MULT [POW (NAME "b") (-1),MULT [POW (NAME "a") (-1), NAME "c"]]]) ++ "\n" ++
@@ -200,7 +200,7 @@ main =
   -- construct_group_sampler 10 >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_eval)) ->
   -- putStrLn . show . snd $ sl2_rep_obfuscated
 
-  -- testSimplification
+  testEquationSolver
   -- testEncodeDecode 10
   -- testEncodeZeroAndOne 10
   -- testEncodeNot 160
