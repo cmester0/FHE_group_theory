@@ -32,6 +32,56 @@ instance Show Token where
   show (INV a) = show a ++ "^-1"
   show (IDENTITY) = "I"
 
+-- 
+remove_identity :: Token -> Token
+remove_identity (MULT l) =
+  let l' = (l >>= \a ->
+           case a of
+             IDENTITY -> []
+             x -> return (remove_identity x)) in
+  case l' of
+    [] -> IDENTITY
+    _ -> MULT l'
+remove_identity (INV IDENTITY) = IDENTITY
+remove_identity (INV a) = INV (remove_identity a)
+remove_identity (NAME s) = (NAME s)
+remove_identity IDENTITY = IDENTITY
+
+-- Equality for tokens
+token_eq_aux :: Token -> Token -> Bool
+token_eq_aux (MULT l0) (MULT l1) = foldr (\(a,b) r -> token_eq_aux a b && r) True (zip l0 l1)
+token_eq_aux (INV a) (INV b) = token_eq_aux a b
+token_eq_aux (IDENTITY) (IDENTITY) = True
+token_eq_aux (NAME a) (NAME b) = a == b
+token_eq_aux _ _ = False
+
+token_eq a b = token_eq_aux (remove_identity a) (remove_identity b)
+
+-- Knuth Bendix algorithm
+knuth_bendix :: Token -> Token
+knuth_bendix (MULT l) =
+  case map knuth_bendix l of
+    [] -> IDENTITY
+    [x] -> x
+    l' -> MULT l'
+  -- Other case should never happen
+
+knuth_bendix (INV (MULT l)) = knuth_bendix $ MULT . map (INV) . reverse $ l
+knuth_bendix (INV (INV a)) = knuth_bendix a
+knuth_bendix (INV IDENTITY) = IDENTITY
+knuth_bendix (INV (NAME s)) = INV (NAME s)
+
+knuth_bendix (NAME s) = NAME s
+knuth_bendix IDENTITY = IDENTITY
+
+knuth_bendix_fix x =  
+  let kx = knuth_bendix . remove_identity . remove_inverse . remove_identity . flatten_mult . remove_identity $ x in
+    if token_eq kx x
+    then kx
+    else knuth_bendix_fix kx
+
+
+-- Definition of power
 mult_pow :: Token -> Integer -> [Token]
 mult_pow a n | n > 0 = take (fromInteger n) $ repeat a
 mult_pow a n | n < 0 = take (fromInteger (-n)) $ repeat (INV a)
@@ -41,6 +91,21 @@ pow a 0 = IDENTITY
 pow a 1 = a
 pow a (-1) = INV a
 pow a n = MULT $ mult_pow a n
+
+remove_while_not_eq [] _ = ([],[])
+remove_while_not_eq (x : xs) h =
+  if token_eq x h
+  then ([], x : xs)
+  else
+    let (f,b) = remove_while_not_eq xs h in
+      (x : f, b)
+
+find_seq :: [Token] -> [Token] -> [Token]
+find_seq l l' =
+  let (t',b') = remove_while_not_eq l (head l') in
+    if foldr (&&) True $ map (\(a,b) -> token_eq a b) (zip b' l')
+    then t' ++ drop (length l') b'
+    else t' ++ (head b') : find_seq (tail b') l'
 
 -- Remove subsection by all other things in symbols:
 remove_subsection_aux :: Token -> Token -> Either Token Token
@@ -53,9 +118,13 @@ remove_subsection_aux (MULT l) a =
                                       Left b -> return (False,b)
                                       Right b -> return (True,b))
     in
-      if foldr (||) False change
-      then Right $ MULT tokens
-      else Left $ MULT tokens
+      case a of
+        MULT l' ->
+          Right . MULT $ find_seq tokens l'
+        _ ->
+          if foldr (||) False change
+          then Right $ MULT tokens
+          else Left $ MULT tokens
 remove_subsection_aux (INV a) b =
   if token_eq (INV a) b
   then Right IDENTITY
@@ -68,7 +137,10 @@ remove_subsection_aux x a =
   then Right IDENTITY
   else Left x
 
-remove_subsection a b = remove_subsection_aux (knuth_bendix_fix a) (knuth_bendix_fix b)
+remove_subsection a b =
+  case remove_subsection_aux (knuth_bendix_fix a) (knuth_bendix_fix b) of
+    Right x -> Right (knuth_bendix_fix x)
+    Left x -> Left x
 
 remove_subsection_list :: Token -> [Token] -> Either Token Token
 remove_subsection_list x [] = Left x
@@ -119,17 +191,6 @@ fix f x =
     then fx
     else fix f fx
 
-remove_identity :: Token -> Token
-remove_identity (MULT l) =
-  MULT (l >>= \a ->
-           case a of
-             IDENTITY -> []
-             x -> return (remove_identity x))
-remove_identity (INV IDENTITY) = IDENTITY
-remove_identity (INV a) = INV (remove_identity a)
-remove_identity (NAME s) = (NAME s)
-remove_identity IDENTITY = IDENTITY
-
 remove_inverse :: Token -> Token
 remove_inverse (MULT l) =
   case l of
@@ -138,29 +199,7 @@ remove_inverse (MULT l) =
 remove_inverse (INV a) = INV (remove_inverse a)
 remove_inverse a = a
 
--- Knuth Bendix algorithm
-knuth_bendix :: Token -> Token
-knuth_bendix (MULT l) =
-  case map knuth_bendix l of
-    [] -> IDENTITY
-    [x] -> x
-    l' -> MULT l'
-  -- Other case should never happen
-
-knuth_bendix (INV (MULT l)) = knuth_bendix $ MULT . map (INV) . reverse $ l
-knuth_bendix (INV (INV a)) = knuth_bendix a
-knuth_bendix (INV IDENTITY) = IDENTITY
-knuth_bendix (INV (NAME s)) = INV (NAME s)
-
-knuth_bendix (NAME s) = NAME s
-knuth_bendix IDENTITY = IDENTITY
-
-knuth_bendix_fix x =  
-  let kx = knuth_bendix . remove_identity . remove_inverse . remove_identity . flatten_mult . remove_identity $ x in
-    if token_eq kx x
-    then kx
-    else knuth_bendix_fix kx
-
+normal_form :: [Token] -> Token -> Token
 normal_form sym x =
   case remove_subsection_list x sym of
     Left x -> knuth_bendix_fix $ x
@@ -223,14 +262,6 @@ evaluate dict _ (NAME s) = lookup_in_list (NAME s) dict
 evaluate dict pq (MULT l) = 
   foldl (\b a -> evaluate dict pq a >>= \x ->  b >>= \y -> Right $ matrix_mult pq y x) (Right identity) l
   -- foldr (\a b -> evaluate dict pq a >>= \x -> b >>= \y ->Right $ matrix_mult pq y x) (Right identity) l
-
-token_eq :: Token -> Token -> Bool
-token_eq (MULT l0) (MULT l1) =
-  foldr (\(a,b) r -> token_eq a b && r) True (zip l0 l1)
-token_eq (INV a) (INV b) = token_eq a b
-token_eq (IDENTITY) (IDENTITY) = True
-token_eq (NAME a) (NAME b) = a == b
-token_eq _ _ = False
 
 move_to_rhs_aux :: String -> Token -> Token -> (Token,Token)
 move_to_rhs_aux s (MULT ((NAME t) : xr)) rhs =
@@ -325,7 +356,7 @@ remove_relation (x : sym') sym =
       else Nothing
 
 -- Representation by strings:
--- TODO: ADD TRACE
+-- TODO: FIX REP 0 and REP 3
 rep_by_index :: Integer -> ([Token],[Token]) -> IO Token -> Integer -> [Trace] -> IO (Maybe (([Token],[Token]),[Trace]))
 rep_by_index 0 (rep,sym) sample_algorithm counter rev_trace =
   sample_algorithm >>= \a ->
@@ -434,9 +465,6 @@ create_sample_list m (rep,sym) =
         return $ MULT [INV ym, zm]
   in
     foldr (\a b -> fm a >>= \x -> b >>= \y -> return $ y ++ [x]) (return rep) [(toInteger (length rep)) .. m]
-    
-  -- sequence ([0 .. 10] >>= \_ -> return $ sample_from_rep (rep,sym)) >>= \l ->
-  -- sample_from_rep ((l ++ rep),sym)
 
 apply_n_times :: Integer -> (a -> IO a) -> IO a -> IO a
 apply_n_times 0 f v = v
@@ -446,7 +474,7 @@ random_tietze_aux :: ([Token],[Token]) -> (([Token],[Token]) -> IO Token) -> [Tr
 random_tietze_aux rep _ rev_trace _ 0 = return (rep,rev_trace)
 random_tietze_aux rep sample rev_trace counter i =
   do
-    putStrLn $ "\nITERATION: " ++ show i
+    putStrLn $ "\nTietze Iteration: " ++ show i
     rep_randomizer rep (sample rep) counter rev_trace [] >>= \(rep,rev_trace) -> random_tietze_aux rep sample rev_trace (counter+1) (i-1)
 
 random_tietze :: ([Token],[Token]) -> (([Token],[Token]) -> IO Token) -> Integer -> IO (([Token],[Token]),[Trace])
@@ -456,13 +484,16 @@ random_tietze rep sample i =
 reduce_group_representation_generators_aux :: ([Token],[Token]) -> [Trace] -> IO (([Token],[Token]),[Trace])
 reduce_group_representation_generators_aux ([],rel) rev_trace = return (([],rel),rev_trace)
 reduce_group_representation_generators_aux (g : gen,rel) rev_trace =
-  maybe (reduce_group_representation_generators_aux (gen,rel) rev_trace >>=
-         return . (\rep' -> ((g : fst (fst rep'), snd (fst rep')), snd rep')))
-    (\sol -> return $
-      maybe ((g:gen,rel),rev_trace) (\sol ->
-        let rel' = map (knuth_bendix_fix . replace_token_by_token g sol) rel in
-          ((g : gen,rel'), REMOVE_GENERATOR g sol : rev_trace)) (find_solution_for_generator_token g rel))
-    (find_solution_for_generator_token g rel)
+  maybe (reduce_group_representation_generators_aux (gen,rel) rev_trace >>= \rep' ->
+         do
+           putStrLn ("GEN ITER " ++ show g ++ " FAIL")
+           return $ ((g : fst (fst rep'), snd (fst rep')), snd rep'))
+  (\sol ->
+      do
+        putStrLn ("GEN ITER " ++ show g ++ " SUCC")
+        let rel' = map (knuth_bendix_fix . replace_token_by_token g (knuth_bendix_fix sol)) rel in
+          reduce_group_representation_generators_aux (gen,rel') (REMOVE_GENERATOR g sol : rev_trace))
+  (find_solution_for_generator_token g rel)
 
 reduce_group_representation_generators :: ([Token],[Token]) -> [Trace] -> IO (([Token],[Token]),[Trace])
 reduce_group_representation_generators rep rev_trace =
@@ -472,11 +503,13 @@ removing_relation_fix :: (([Token],[Token]),[Trace]) -> IO (([Token],[Token]),[T
 removing_relation_fix ((gen,rel),rev_trace) =
   do
     putStrLn ("ITER " ++ show (length rel))
-    maybe (return ((gen,map knuth_bendix_fix rel),rev_trace)) (\(r,rel') -> removing_relation_fix ((gen,rel'), REMOVE_RELATION r : rev_trace)) (remove_relation rel rel)
+    let rel' = map knuth_bendix_fix rel in
+      maybe (return ((gen,rel'),rev_trace)) (\(r,rel'') -> removing_relation_fix ((gen,rel''), REMOVE_RELATION r : rev_trace)) (remove_relation rel' rel')
                                     
 reduce_group_representation :: (([Token],[Token]) -> IO Token) -> Integer -> (([Token],[Token]),[Trace]) -> IO (([Token],[Token]),[Trace])
 reduce_group_representation sample threshold (rep,rev_trace) =
   reduce_group_representation_generators rep rev_trace >>= \x ->
   do
+    putStrLn . show . fst $ rep
     putStrLn . show . fst . fst $ x
     removing_relation_fix x

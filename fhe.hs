@@ -48,7 +48,7 @@ decode ker pi_eval (h,t) =
     pi_eval h >>= \ph ->
     if ph == pt
     then Right True
-    else Left . show $ (h,t)
+    else Left $ show ph ++ " vs " ++ show pt
     
    -------------------
    -- Group sampler --
@@ -81,19 +81,17 @@ construct_group_sampler k =
   let phi = (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated) in
   let psi = (calculate_value_from_trace (reverse rev_trace) sl2_rep) in
   create_sample_list k3 sl2_rep_1 >>= \sample_list_G ->
-    -- TODO BETTER SAMPLING -- sl2_rep_obfuscated
   create_sample_list k3 sl2_rep_2 >>= \sample_list_K ->
-  let sample_G = (cube sample_list_G) >>= return . psi in
-  let sample_K = (cube sample_list_K) >>= return . psi in
+  let sample_G = (cube sample_list_G) >>= return . knuth_bendix_fix . psi in
+  let sample_K = (cube sample_list_K) >>= return . knuth_bendix_fix . psi in
   let pi1 = (replace_name_by_token "u_2" IDENTITY) .
             (replace_name_by_token "t_2" IDENTITY) .
             (replace_name_by_token "h2_2" IDENTITY) .
             (replace_name_by_token "h_2" IDENTITY) in
   let namesList = [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] in
-  let pi1_eval = (evaluate (zip namesList matrix1) pq1) . normal_form (snd sl2_rep) . pi1 . phi . normal_form (snd sl2_rep_obfuscated) in
+  let pi1_eval = (evaluate (zip namesList matrix1) pq1) . pi1 . phi . knuth_bendix_fix in
+  -- let pi1_eval = (evaluate (zip namesList matrix1) pq1) . normal_form (snd sl2_rep_1) . pi1 . phi . normal_form (snd sl2_rep_obfuscated) in
   let ker = \x -> pi1_eval x >>= \y -> return $ (identity == y) in
-
-  let knuth_iter = knuth_bendix_fix . remove_identity . remove_inverse . remove_identity . flatten_mult . remove_identity in
     do
       putStrLn . show . length . snd $ sl2_rep_obfuscated
       putStrLn . show . fst $ sl2_rep_obfuscated

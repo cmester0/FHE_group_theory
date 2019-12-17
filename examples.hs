@@ -69,18 +69,56 @@ loop render i =
     loop render (i-1)
 
 main =
-  -- let rel = [MULT [NAME "s",NAME "v"], INV (MULT [NAME "s",NAME "v"])] in
+  -- putStrLn . show $
+  -- normal_form [MULT [NAME "s",NAME "v"]] (MULT [NAME "k",NAME "s", NAME "k",NAME "v",INV (NAME "k")]) 
+  
+  
+  -- let rel = [MULT [NAME "k",NAME "s",NAME "v",INV (NAME "k")], INV (MULT [NAME "s",NAME "v"])] in
   -- let rel' = (map knuth_bendix rel) in
   --   let x = (MULT [NAME "s",NAME "v"]) in
   --   let y = (INV (MULT [NAME "s",NAME "v"])) in
   --   do
-  --     putStrLn . show $ remove_relation rel' rel'
-  --     removing_relation_fix (([], rel),[]) >>= putStrLn . show
+  --     putStrLn . show $ head rel
+  --     putStrLn . show $ (tail rel) ++ map (knuth_bendix_fix . INV) (tail rel)
+  --     putStrLn . show $ remove_subsection_list (head rel) ((tail rel) ++ map (knuth_bendix_fix . INV) (tail rel))
+      
+      -- putStrLn . show $ rel
+      -- putStrLn . show $ rel'
+      -- putStrLn . show $ map (knuth_bendix_fix . INV) rel'
+      -- putStrLn . show $ remove_relation rel rel
+      -- putStrLn . show $ remove_relation rel' rel'
+      -- removing_relation_fix (([], rel),[]) >>= putStrLn . show
     
     -- putStrLn . show $ remove_subsection_list (head rel) (tail rel)
 
     -- putStrLn . show $ remove_relation rel rel
 
+  -- putStrLn . show $ token_eq (MULT []) IDENTITY
+  
   -- testEquationSolver
   -- testEncodeDecode 30
   testEncodeNot 30
+
+  
+  -- let k = 30 in
+  -- construct_group_sampler k >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi)) ->
+  -- sample_G >>= \x ->
+  --   do 
+  --     putStrLn . show $ knuth_bendix_fix x
+  --     putStrLn . show $ normal_form (snd sl2_rep_obfuscated) x
+  --     putStrLn . show $ pi x
+
+
+
+
+  -- let enc = (encode sample_G sample_K) in
+  -- let and_op = (token_and_operation sample_G) in
+  -- let not_op = token_not_operation in
+  -- let dec = (decode ker pi) in
+  --   enc True >>= \x ->
+  --   do
+      -- putStrLn . show . fst $ sl2_rep_obfuscated 
+      -- putStrLn . show $ (knuth_bendix_fix . fst $ x, knuth_bendix_fix . snd $ x)
+      -- putStrLn . show . dec $ (knuth_bendix_fix . fst $ x, knuth_bendix_fix . snd $ x)
+      -- putStrLn . show . dec $ x
+    
