@@ -452,14 +452,19 @@ cube rep =
     random_order l >>= \l' ->
     return $ MULT (filter (not . token_eq IDENTITY) l')
 
+create_sample_list_aux :: Int -> ([Token],[Token]) -> IO [[Token]]
+create_sample_list_aux m (rep,sym) | m < length rep = return [rep]
+create_sample_list_aux m (rep,sym) =
+  create_sample_list_aux (m-1) (rep,sym) >>= \sample_lists ->
+  let sl = sample_lists !! (m-length rep) in
+  cube sl >>= \ym ->
+  cube sl >>= \zm ->
+  return ((MULT [INV ym, zm] : sl) : sample_lists)
+
+create_sample_list :: Integer -> ([Token],[Token]) -> IO [Token]
 create_sample_list m (rep,sym) =
-  let fm = \m -> 
-        create_sample_list (m-1) (rep,sym) >>= \sample_list ->
-        cube sample_list >>= \ym -> 
-        cube sample_list >>= \zm ->
-        return $ MULT [INV ym, zm]
-  in
-    foldr (\a b -> fm a >>= \x -> b >>= \y -> return $ y ++ [x]) (return rep) [(toInteger (length rep)) .. m]
+  create_sample_list_aux (fromInteger m) (rep,sym) >>= \sample_lists ->
+  return $ sample_lists !! (fromInteger m-length rep)
 
 apply_n_times :: Integer -> (a -> IO a) -> IO a -> IO a
 apply_n_times 0 f v = v
@@ -474,7 +479,9 @@ random_tietze_aux rep sample rev_trace counter i =
 
 random_tietze :: ([Token],[Token]) -> ([Trace] -> IO Token) -> Integer -> IO (([Token],[Token]),[Trace])
 random_tietze rep sample i =
-  random_tietze_aux rep sample [] 0 i
+  do
+    putStrLn "Start of Tietze obfuscation"
+    random_tietze_aux rep sample [] 0 i
 
 --- A generator can only be removed if it is redundant, meaning that it can be expressed by
 --- other generators, by a redundant relation.
@@ -512,4 +519,6 @@ removing_relation_fix ((gen,rel),rev_trace) =
                                     
 reduce_group_representation :: (([Token],[Token]),[Trace]) -> IO (([Token],[Token]),[Trace])
 reduce_group_representation (rep,rev_trace) =
-  reduce_group_representation_generators rep rev_trace >>= removing_relation_fix
+  do
+    putStrLn "Start of reduction"
+    reduce_group_representation_generators rep rev_trace >>= removing_relation_fix

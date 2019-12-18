@@ -71,28 +71,36 @@ group_commutor (a : s) t =
 product_representation (s,r) (t,q) = (s ++ t, r ++ q ++ group_commutor s t)
 
 construct_group_sampler :: Integer -> IO ((([Token],[Token]), IO Token, IO Token), (Token -> Either String Bool, Token -> Either String [[Integer]])) -- TODO: Replace integer with bool!
-construct_group_sampler k =  
+construct_group_sampler k =
+  do
+  putStrLn "Start"
   let k3 = 4*k + 3 in
-  generate_group_rep (k+4) ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,pq1,matrix1) ->
-  generate_group_rep (k*2) ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,_,_) ->
-  let sl2_rep = product_representation sl2_rep_1 sl2_rep_2 in
-  create_sample_list k3 sl2_rep >>= \sample_list ->
-  obfuscate_group k k3 sample_list sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->  
-  let phi = (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated) in
-  let psi = (calculate_value_from_trace (reverse rev_trace) sl2_rep) in
-  create_sample_list k3 sl2_rep_1 >>= \sample_list_G ->
-  create_sample_list k3 sl2_rep_2 >>= \sample_list_K ->
-  let sample_G = (cube sample_list_G) >>= return . knuth_bendix_fix . psi in
-  let sample_K = (cube sample_list_K) >>= return . knuth_bendix_fix . psi in
-  let pi1 = (replace_name_by_token "u_2" IDENTITY) .
-            (replace_name_by_token "t_2" IDENTITY) .
-            (replace_name_by_token "h2_2" IDENTITY) .
-            (replace_name_by_token "h_2" IDENTITY) in
-  let namesList = [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] in
-  let pi1_eval = (evaluate (zip namesList matrix1) pq1) . knuth_bendix_fix . pi1 . phi . knuth_bendix_fix in
-  -- let pi1_eval = (evaluate (zip namesList matrix1) pq1) . normal_form (snd sl2_rep_1) . pi1 . phi . normal_form (snd sl2_rep_obfuscated) in
-  let ker = \x -> pi1_eval x >>= \y -> return $ (identity == y) in
-    return ((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_eval))
+    generate_group_rep (k+4) ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,pq1,matrix1) ->
+    generate_group_rep (k*2) ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,_,_) ->
+    let sl2_rep = product_representation sl2_rep_1 sl2_rep_2 in
+    do
+      putStrLn "Done creating (G x N)"
+      create_sample_list k3 sl2_rep >>= \sample_list ->
+        do
+          putStrLn "Done creating sample_list for (G x N)"
+          obfuscate_group k k3 sample_list sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->
+            do
+              putStrLn "Done Obfuscating"
+              let phi = (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated) in
+                let psi = (calculate_value_from_trace (reverse rev_trace) sl2_rep) in
+                create_sample_list k3 sl2_rep_1 >>= \sample_list_G ->
+                create_sample_list k3 sl2_rep_2 >>= \sample_list_K ->
+                let sample_G = (cube sample_list_G) >>= return . knuth_bendix_fix . psi in
+                let sample_K = (cube sample_list_K) >>= return . knuth_bendix_fix . psi in
+                let pi1 = (replace_name_by_token "u_2" IDENTITY) .
+                        (replace_name_by_token "t_2" IDENTITY) .
+                        (replace_name_by_token "h2_2" IDENTITY) .
+                        (replace_name_by_token "h_2" IDENTITY) in
+                let namesList = [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] in
+                let pi1_eval = (evaluate (zip namesList matrix1) pq1) . knuth_bendix_fix . pi1 . phi . knuth_bendix_fix in
+            -- let pi1_eval = (evaluate (zip namesList matrix1) pq1) . normal_form (snd sl2_rep_1) . pi1 . phi . normal_form (snd sl2_rep_obfuscated) in
+                let ker = \x -> pi1_eval x >>= \y -> return $ (identity == y) in
+                  return ((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_eval))
 
 construct_FHE :: Integer -> IO ((Bool -> IO (Token,Token)), ((Token,Token) -> (Token,Token) -> IO (Token,Token), (Token,Token) -> (Token,Token)), ((Token,Token) -> Either String Bool))
 construct_FHE k =
