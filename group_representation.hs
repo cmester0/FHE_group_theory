@@ -32,7 +32,6 @@ instance Show Token where
   show (INV a) = show a ++ "^-1"
   show (IDENTITY) = "I"
 
--- 
 remove_identity :: Token -> Token
 remove_identity (MULT l) =
   let l' = (l >>= \a ->
@@ -74,12 +73,50 @@ knuth_bendix (INV (NAME s)) = INV (NAME s)
 knuth_bendix (NAME s) = NAME s
 knuth_bendix IDENTITY = IDENTITY
 
+list_flat_list :: [Token] -> [Token]
+list_flat_list (MULT l : xs) = list_flat_list l ++ list_flat_list xs
+list_flat_list (INV a : xs) = map (INV) (reverse (list_flat_list [a])) ++ list_flat_list xs
+list_flat_list (NAME s : xs) = NAME s : (list_flat_list xs)
+list_flat_list (IDENTITY : xs) = list_flat_list xs
+list_flat_list [] = []
+
+flatten_mult :: Token -> Token
+flatten_mult (MULT l) = MULT (list_flat_list l)
+flatten_mult (INV (MULT l)) = flatten_mult $ MULT (map (INV) (reverse l))
+flatten_mult (INV a) = INV (flatten_mult a)
+flatten_mult (NAME s) = NAME s
+flatten_mult IDENTITY = IDENTITY
+
+remove_x_inv_x a [] = [a]
+remove_x_inv_x (INV a) (b : xs) =
+  if token_eq a b
+  then
+    case xs of
+      [] -> []
+      (c : cs) -> remove_x_inv_x c cs
+  else (INV a) : remove_x_inv_x b xs
+remove_x_inv_x a (INV b : xs) =
+  if token_eq a b
+  then
+    case xs of
+      [] -> []
+      (c : cs) -> remove_x_inv_x c cs
+  else a : remove_x_inv_x (INV b) xs
+remove_x_inv_x a (b : xs) = a : remove_x_inv_x b xs
+
+remove_inverse :: Token -> Token
+remove_inverse (MULT l) =
+  case l of
+    [] -> MULT []
+    (c : cs) -> MULT (remove_x_inv_x c cs)
+remove_inverse (INV a) = INV (remove_inverse a)
+remove_inverse a = a
+
 knuth_bendix_fix x =  
   let kx = knuth_bendix . remove_identity . remove_inverse . remove_identity . flatten_mult . remove_identity $ x in
     if token_eq kx x
     then kx
     else knuth_bendix_fix kx
-
 
 -- Definition of power
 mult_pow :: Token -> Integer -> [Token]
@@ -92,6 +129,7 @@ pow a 1 = a
 pow a (-1) = INV a
 pow a n = MULT $ mult_pow a n
 
+-- Subsection removal helper functions
 remove_while_not_eq [] _ = ([],[])
 remove_while_not_eq (x : xs) h =
   if token_eq x h
@@ -150,60 +188,15 @@ remove_subsection_list x (y : ys) =
       case remove_subsection_list x' ys of
         Right y' -> Right y'
         Left y' -> Right y'
-    Left x' -> remove_subsection_list x' ys
-
-
-remove_x_inv_x a [] = [a]
-remove_x_inv_x (INV a) (b : xs) =
-  if token_eq a b
-  then
-    case xs of
-      [] -> []
-      (c : cs) -> remove_x_inv_x c cs
-  else (INV a) : remove_x_inv_x b xs
-remove_x_inv_x a (INV b : xs) =
-  if token_eq a b
-  then
-    case xs of
-      [] -> []
-      (c : cs) -> remove_x_inv_x c cs
-  else a : remove_x_inv_x (INV b) xs
-remove_x_inv_x a (b : xs) = a : remove_x_inv_x b xs
-
-list_flat_list :: [Token] -> [Token]
-list_flat_list (MULT l : xs) = list_flat_list l ++ list_flat_list xs
-list_flat_list (INV a : xs) = map (INV) (reverse (list_flat_list [a])) ++ list_flat_list xs
-list_flat_list (NAME s : xs) = NAME s : (list_flat_list xs)
-list_flat_list (IDENTITY : xs) = list_flat_list xs
-list_flat_list [] = []
-
-flatten_mult :: Token -> Token
-flatten_mult (MULT l) = MULT (list_flat_list l)
-flatten_mult (INV (MULT l)) = flatten_mult $ MULT (map (INV) (reverse l))
-flatten_mult (INV a) = INV (flatten_mult a)
-flatten_mult (NAME s) = NAME s
-flatten_mult IDENTITY = IDENTITY
-
-fix :: (Token -> Token) -> Token -> Token
-fix f x =
-  let fx = f x in
-    if token_eq fx x
-    then fx
-    else fix f fx
-
-remove_inverse :: Token -> Token
-remove_inverse (MULT l) =
-  case l of
-    [] -> MULT []
-    (c : cs) -> MULT (remove_x_inv_x c cs)
-remove_inverse (INV a) = INV (remove_inverse a)
-remove_inverse a = a
+    Left x' ->
+      remove_subsection_list x' ys
 
 normal_form :: [Token] -> Token -> Token
-normal_form sym x =
-  case remove_subsection_list x sym of
-    Left x -> knuth_bendix_fix $ x
-    Right x -> knuth_bendix_fix $ x
+normal_form rel x = 
+  let relinv = map INV rel in
+    case remove_subsection_list (knuth_bendix_fix x) (map knuth_bendix_fix (rel ++ relinv)) of
+      Left y -> knuth_bendix_fix $ y
+      Right y -> knuth_bendix_fix $ y
 
 -- Create representation
 base4 :: Integer -> [Integer]
@@ -284,28 +277,28 @@ move_to_rhs_aux s (INV (NAME t)) rhs =
 move_to_rhs_aux s a rhs = (a,rhs)
 
 move_to_rhs :: [Token] -> String -> Token -> Token -> (Token,Token)
-move_to_rhs sym s t rhs =
+move_to_rhs rel s t rhs =
   let (x,rhs') = (move_to_rhs_aux s t rhs) in
-  let flip = \v -> normal_form sym (INV v) in
+  let flip = \v -> normal_form rel (INV v) in
   let (y,rhs'') = move_to_rhs_aux s (flip x) (flip rhs') in
-    (flip y , normal_form sym $ flip rhs'')
+    (flip y , normal_form rel $ flip rhs'')
 
 remove_tokens :: [Token] -> String -> Token -> Token
-remove_tokens sym s t = (normal_form sym) . fst $ move_to_rhs sym s t IDENTITY
+remove_tokens rel s t = (normal_form rel) . fst $ move_to_rhs rel s t IDENTITY
 
 reduced s (INV t) = reduced s t
 reduced s (NAME t) = s == t
 reduced s _ = False
   
 solvable :: [Token] -> String -> Token -> Bool
-solvable sym s = (reduced s) . (remove_tokens sym s) . (normal_form sym)
+solvable rel s = (reduced s) . (remove_tokens rel s) . (normal_form rel)
 
 solve_for_token :: [Token] -> String -> Token -> Token
-solve_for_token sym s t =
-  let (rest,rhs) = move_to_rhs sym s (normal_form sym t) IDENTITY in
-  if token_eq (normal_form sym rest) (NAME s)
-  then normal_form sym $ rhs
-  else normal_form sym $ INV rhs
+solve_for_token rel s t =
+  let (rest,rhs) = move_to_rhs rel s (normal_form rel t) IDENTITY in
+  if token_eq (normal_form rel rest) (NAME s)
+  then normal_form rel $ rhs
+  else normal_form rel $ INV rhs
   
 replace_name_by_token :: String -> Token -> Token -> Token
 replace_name_by_token s a (NAME t) =
@@ -322,17 +315,18 @@ replace_token_by_token :: Token -> Token -> Token -> Token
 replace_token_by_token (NAME t) a b = replace_name_by_token t a b
   
 find_solution_for_generator :: [Token] -> String -> [Token] -> Maybe Token
-find_solution_for_generator sym s (h:hs) =
-  if solvable sym s h
-  then Just $ solve_for_token sym s h
-  else find_solution_for_generator sym s hs
+find_solution_for_generator rel s (h:hs) =
+  let relsubh = filter (not . token_eq h) rel in
+  if solvable [] s h
+  then Just $ solve_for_token [] s h
+  else find_solution_for_generator rel s hs
 find_solution_for_generator _ _ [] = Nothing
 
 -- TODO: This is the current bottleneck!
 -- TODO: Tail recursion
 -- TODO: Solve for all equalities (on the right side) / Dynamic!
 find_solution_for_generator_token :: Token -> [Token] -> Maybe Token
-find_solution_for_generator_token (NAME s) sym = find_solution_for_generator sym s sym
+find_solution_for_generator_token (NAME s) rel = find_solution_for_generator rel s rel
 find_solution_for_generator_token _ _ = Nothing
 
 data Trace =
@@ -345,14 +339,15 @@ data Trace =
 -- Assumption knuth_bendix normal form
 remove_relation :: [Token] -> [Token] -> Maybe (Token,[Token])
 remove_relation [] _ = Nothing
-remove_relation (x : sym') sym =
-  let symsubx = filter (not . token_eq x) sym in
-  let symsubxinv = map (knuth_bendix_fix . INV) symsubx in
-  case remove_subsection_list x (symsubx ++ symsubxinv) of
-    Left _ -> remove_relation sym' sym
+remove_relation (x : rel') rel =
+  let x' = knuth_bendix_fix x in
+  let relsubx = filter (not . token_eq x) rel in
+  let relsubxinv = map INV relsubx in
+  case remove_subsection_list x' (map knuth_bendix_fix (relsubx ++ relsubxinv)) of
+    Left _ -> remove_relation rel' rel
     Right y ->
       if token_eq y IDENTITY
-      then Just (x,symsubx)
+      then Just (x',relsubx)
       else Nothing
 
 -- Representation by strings:
@@ -470,16 +465,19 @@ apply_n_times :: Integer -> (a -> IO a) -> IO a -> IO a
 apply_n_times 0 f v = v
 apply_n_times n f v = apply_n_times (n-1) f v >>= f
 
-random_tietze_aux :: ([Token],[Token]) -> (([Token],[Token]) -> IO Token) -> [Trace] -> Integer -> Integer -> IO (([Token],[Token]),[Trace])
+random_tietze_aux :: ([Token],[Token]) -> ([Trace] -> IO Token) -> [Trace] -> Integer -> Integer -> IO (([Token],[Token]),[Trace])
 random_tietze_aux rep _ rev_trace _ 0 = return (rep,rev_trace)
 random_tietze_aux rep sample rev_trace counter i =
   do
     putStrLn $ "\nTietze Iteration: " ++ show i
-    rep_randomizer rep (sample rep) counter rev_trace [] >>= \(rep,rev_trace) -> random_tietze_aux rep sample rev_trace (counter+1) (i-1)
+    rep_randomizer rep (sample rev_trace) counter rev_trace [] >>= \(rep,rev_trace) -> random_tietze_aux rep sample rev_trace (counter+1) (i-1)
 
-random_tietze :: ([Token],[Token]) -> (([Token],[Token]) -> IO Token) -> Integer -> IO (([Token],[Token]),[Trace])
+random_tietze :: ([Token],[Token]) -> ([Trace] -> IO Token) -> Integer -> IO (([Token],[Token]),[Trace])
 random_tietze rep sample i =
   random_tietze_aux rep sample [] 0 i
+
+--- A generator can only be removed if it is redundant, meaning that it can be expressed by
+--- other generators, by a redundant relation.
 
 reduce_group_representation_generators_aux :: ([Token],[Token]) -> [Trace] -> IO (([Token],[Token]),[Trace])
 reduce_group_representation_generators_aux ([],rel) rev_trace = return (([],rel),rev_trace)
@@ -489,11 +487,11 @@ reduce_group_representation_generators_aux (g : gen,rel) rev_trace =
            putStrLn ("GEN ITER " ++ show g ++ " FAIL")
            return $ ((g : fst (fst rep'), snd (fst rep')), snd rep'))
   (\sol ->
+     let rel' = filter (not . token_eq IDENTITY) $ map (knuth_bendix_fix . replace_token_by_token g (knuth_bendix_fix sol)) rel in
       do
         putStrLn ("GEN ITER " ++ show g ++ " SUCC")
-        let rel' = map (knuth_bendix_fix . replace_token_by_token g (knuth_bendix_fix sol)) rel in
-          reduce_group_representation_generators_aux (gen,rel') (REMOVE_GENERATOR g sol : rev_trace))
-  (find_solution_for_generator_token g rel)
+        reduce_group_representation_generators_aux (gen,rel') (REMOVE_GENERATOR g sol : rev_trace))
+  (find_solution_for_generator_token g (map knuth_bendix_fix rel))
 
 reduce_group_representation_generators :: ([Token],[Token]) -> [Trace] -> IO (([Token],[Token]),[Trace])
 reduce_group_representation_generators rep rev_trace =
@@ -501,15 +499,17 @@ reduce_group_representation_generators rep rev_trace =
 
 removing_relation_fix :: (([Token],[Token]),[Trace]) -> IO (([Token],[Token]),[Trace])
 removing_relation_fix ((gen,rel),rev_trace) =
-  do
-    putStrLn ("ITER " ++ show (length rel))
-    let rel' = map knuth_bendix_fix rel in
-      maybe (return ((gen,rel'),rev_trace)) (\(r,rel'') -> removing_relation_fix ((gen,rel''), REMOVE_RELATION r : rev_trace)) (remove_relation rel' rel')
+  let rel' = map knuth_bendix_fix rel in
+    maybe
+      (do
+          putStrLn ("REL ITER " ++ show (length rel) ++ " FAIL")
+          return ((gen,rel'),rev_trace))
+      (\(r,rel'') ->
+           do
+             putStrLn ("REL ITER " ++ show (length rel) ++ " SUCC")
+             removing_relation_fix ((gen,rel''), REMOVE_RELATION r : rev_trace))
+      (remove_relation rel' rel')
                                     
-reduce_group_representation :: (([Token],[Token]) -> IO Token) -> Integer -> (([Token],[Token]),[Trace]) -> IO (([Token],[Token]),[Trace])
-reduce_group_representation sample threshold (rep,rev_trace) =
-  reduce_group_representation_generators rep rev_trace >>= \x ->
-  do
-    putStrLn . show . fst $ rep
-    putStrLn . show . fst . fst $ x
-    removing_relation_fix x
+reduce_group_representation :: (([Token],[Token]),[Trace]) -> IO (([Token],[Token]),[Trace])
+reduce_group_representation (rep,rev_trace) =
+  reduce_group_representation_generators rep rev_trace >>= removing_relation_fix

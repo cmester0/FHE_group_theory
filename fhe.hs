@@ -59,10 +59,10 @@ generate_group_rep k s =
   fq (k+1) >>= \(pq,q) -> sl2_fq_rep (pq,1,pq) s >>= \(sl2_rep,matrix) ->
   return (sl2_rep,pq,matrix)
 
-obfuscate_group :: Integer -> Integer -> ([Token],[Token]) -> IO (([Token],[Token]),[Trace])
-obfuscate_group k k2 rep =
-  let sample = (\rep -> create_sample_list k2 rep >>= cube) in
-  random_tietze rep sample k >>= reduce_group_representation sample k
+obfuscate_group :: Integer -> Integer -> [Token] -> ([Token],[Token]) -> IO (([Token],[Token]),[Trace])
+obfuscate_group k k2 sample_list rep =
+  let sample = (\rev_trace -> cube sample_list >>= return . (calculate_value_from_trace (reverse rev_trace) rep)) in
+    random_tietze rep sample k >>= reduce_group_representation
 
 group_commutor [] t = []
 group_commutor (a : s) t =
@@ -72,12 +72,12 @@ product_representation (s,r) (t,q) = (s ++ t, r ++ q ++ group_commutor s t)
 
 construct_group_sampler :: Integer -> IO ((([Token],[Token]), IO Token, IO Token), (Token -> Either String Bool, Token -> Either String [[Integer]])) -- TODO: Replace integer with bool!
 construct_group_sampler k =  
-  let k2 = 40 in
-  let k3 = 10 in
-  generate_group_rep k ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,pq1,matrix1) ->
-  generate_group_rep k ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,_,_) ->
+  let k3 = 4*k + 3 in
+  generate_group_rep (k+4) ("u_1","t_1","h2_1","h_1") >>= \(sl2_rep_1,pq1,matrix1) ->
+  generate_group_rep (k*2) ("u_2","t_2","h2_2","h_2") >>= \(sl2_rep_2,_,_) ->
   let sl2_rep = product_representation sl2_rep_1 sl2_rep_2 in
-  obfuscate_group k2 k3 sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->  
+  create_sample_list k3 sl2_rep >>= \sample_list ->
+  obfuscate_group k k3 sample_list sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->  
   let phi = (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated) in
   let psi = (calculate_value_from_trace (reverse rev_trace) sl2_rep) in
   create_sample_list k3 sl2_rep_1 >>= \sample_list_G ->
@@ -89,13 +89,10 @@ construct_group_sampler k =
             (replace_name_by_token "h2_2" IDENTITY) .
             (replace_name_by_token "h_2" IDENTITY) in
   let namesList = [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] in
-  let pi1_eval = (evaluate (zip namesList matrix1) pq1) . pi1 . phi . knuth_bendix_fix in
+  let pi1_eval = (evaluate (zip namesList matrix1) pq1) . knuth_bendix_fix . pi1 . phi . knuth_bendix_fix in
   -- let pi1_eval = (evaluate (zip namesList matrix1) pq1) . normal_form (snd sl2_rep_1) . pi1 . phi . normal_form (snd sl2_rep_obfuscated) in
   let ker = \x -> pi1_eval x >>= \y -> return $ (identity == y) in
-    do
-      putStrLn . show . length . snd $ sl2_rep_obfuscated
-      putStrLn . show . fst $ sl2_rep_obfuscated
-      return ((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_eval))
+    return ((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_eval))
 
 construct_FHE :: Integer -> IO ((Bool -> IO (Token,Token)), ((Token,Token) -> (Token,Token) -> IO (Token,Token), (Token,Token) -> (Token,Token)), ((Token,Token) -> Either String Bool))
 construct_FHE k =
