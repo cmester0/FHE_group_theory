@@ -59,8 +59,8 @@ generate_group_rep k s =
   fq (k+1) >>= \(pq,q) -> sl2_fq_rep (pq,1,pq) s >>= \(sl2_rep,matrix) ->
   return (sl2_rep,pq,matrix)
 
-obfuscate_group :: Integer -> Integer -> [Token] -> ([Token],[Token]) -> IO (([Token],[Token]),[Trace])
-obfuscate_group k k2 sample_list rep =
+obfuscate_group :: Integer -> [Token] -> ([Token],[Token]) -> IO (([Token],[Token]),[Trace])
+obfuscate_group k sample_list rep =
   let sample = (\rev_trace -> cube sample_list >>= return . (calculate_value_from_trace (reverse rev_trace) rep)) in
     random_tietze rep sample k >>= reduce_group_representation
 
@@ -70,7 +70,7 @@ group_commutor (a : s) t =
 
 product_representation (s,r) (t,q) = (s ++ t, r ++ q ++ group_commutor s t)
 
-construct_group_sampler :: Integer -> IO ((([Token],[Token]), IO Token, IO Token), (Token -> Either String Bool, Token -> Either String [[Integer]])) -- TODO: Replace integer with bool!
+construct_group_sampler :: Integer -> IO ((([Token],[Token]), IO Token, IO Token), (Token -> Either String Bool, Token -> Either String [[Integer]]))
 construct_group_sampler k =
   do
   putStrLn "Start"
@@ -83,7 +83,7 @@ construct_group_sampler k =
       create_sample_list k3 sl2_rep >>= \sample_list ->
         do
           putStrLn "Done creating sample_list for (G x N)"
-          obfuscate_group k k3 sample_list sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->
+          obfuscate_group k sample_list sl2_rep >>= \(sl2_rep_obfuscated,rev_trace) ->
             do
               putStrLn "Done Obfuscating"
               let phi = (calculate_value_from_rev_trace rev_trace sl2_rep_obfuscated) in
@@ -98,7 +98,7 @@ construct_group_sampler k =
                         (replace_name_by_token "h_2" IDENTITY) in
                 let namesList = [NAME "u_1",NAME "t_1",NAME "h2_1",NAME "h_1"] in
                 let pi1_eval = (evaluate (zip namesList matrix1) pq1) . knuth_bendix_fix . pi1 . phi . knuth_bendix_fix in
-            -- let pi1_eval = (evaluate (zip namesList matrix1) pq1) . normal_form (snd sl2_rep_1) . pi1 . phi . normal_form (snd sl2_rep_obfuscated) in
+                -- let pi1_eval = (evaluate (zip namesList matrix1) pq1) . normal_form (snd sl2_rep_1) . pi1 . phi . normal_form (snd sl2_rep_obfuscated) in
                 let ker = \x -> pi1_eval x >>= \y -> return $ (identity == y) in
                   return ((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi1_eval))
 
@@ -110,76 +110,3 @@ construct_FHE k =
   let not_op = token_not_operation in
   let dec = (decode ker pi) in
   return ((enc),(and_op,not_op),(dec))
-
-  ------------
-  --- TESTS --
-  ------------
-
-testEquationSolver =
-  putStrLn $
-  let val = MULT [(NAME "c") , (NAME "a") , (INV (NAME "a")), (INV (NAME "a")) , (NAME "b")] in
-  "Pure: " ++ show val ++ "\n" ++
-  "Normal: " ++ show (normal_form [] val) ++ "\n" ++
-  "MoveL: " ++ show (move_to_rhs_aux "a" (normal_form [] val) IDENTITY) ++ "\n" ++
-  "Flip: " ++ show (normal_form [] $ INV val) ++ "\n" ++
-  "MoveR: " ++ show (move_to_rhs_aux "a" (normal_form [] $ INV val) IDENTITY) ++ "\n" ++
-  "FlipFlip: " ++ show (normal_form [] $ INV (normal_form [] $ INV val)) ++ "\n" ++
-  "Rem?: " ++ show (move_to_rhs [] "a" (normal_form [] val) IDENTITY) ++ "\n" ++
-  "Rem: " ++ show (remove_tokens [] "a" (normal_form [] val)) ++ "\n" ++
-  "Reduced: " ++ show (reduced "a" (remove_tokens [] "a" (normal_form [] val))) ++ "\n" ++
-  "Normal Rem: " ++ show (normal_form [] (remove_tokens [] "a" (normal_form [] val))) ++ "\n" ++
-  "Normal Rem: " ++ show (normal_form [] (remove_tokens [] "a" (normal_form [] val))) ++ "\n" ++
-  "Solveable: " ++ show (solvable [] "a" val) ++ "\n" ++
-  "Solution: " ++ show (solve_for_token [] "a" val) ++ "\n" ++
-  "Find generator: " ++ show (find_solution_for_generator [] "a" [val])
-    
-testEncodeZeroAndOne k =
-  construct_group_sampler k >>= \((sl2_rep_obfuscated,sample_G,sample_K),(ker,pi)) ->
-  sample_K >>= \k ->
-  sample_G >>= \g ->
-  putStrLn $
-  show (ker k) ++ " " ++ show (ker g)
-
-testEncodeDecode k =
-  construct_FHE k >>= \((enc),(and_op,not_op),(dec)) ->
-  enc False >>= \zero ->
-  enc True >>= \one ->
-  putStrLn $
-  show (dec zero) ++ "\n" ++
-  show (dec one)
-
-testEncodeAnd k =
-  construct_FHE k >>= \((enc),(and_op,not_op),(dec)) ->
-  (enc True) >>= \a ->
-  (enc True) >>= \b ->
-  (enc False) >>= \c ->
-  (enc True) >>= \d ->    
-  (enc False) >>= \e ->
-  (enc False) >>= \f ->
-  and_op a b >>= \ab ->
-  and_op c d >>= \cd ->
-  and_op e f >>= \ef ->
-  putStrLn $
-  show (dec a) ++ "\n" ++
-  show (dec b) ++ "\n" ++
-  show (dec c) ++ "\n" ++
-  show (dec d) ++ "\n" ++
-  show (dec e) ++ "\n" ++
-  show (dec f) ++ "\n" ++
-  show (dec ab) ++ "\n" ++
-  show (dec cd) ++ "\n" ++
-  show (dec ef) ++ "\n"
-
-testEncodeNot k =
-  construct_FHE k >>= \((enc),(and_op,not_op),(dec)) ->
-  (enc True) >>= \a ->
-  (enc False) >>= \b ->
-  let na = not_op a in
-  let nb = not_op b in
-  putStrLn $
-  
-  show (dec a) ++ "\n" ++
-  show (dec b) ++ "\n\n" ++
-  
-  show (dec na) ++ "\n" ++
-  show (dec nb) ++ "\n---"

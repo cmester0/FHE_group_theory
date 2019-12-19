@@ -8,20 +8,12 @@ import PrimeNumbers
 import Group
 import Matrix
 
--- fq :: Integer -> IO (Integer, Integer, Integer)
--- fq k =
---   randomRIO (1,k) >>= \q ->
---   (large_prime k) >>= \p ->
---   return (p,q,p ^ q)
-
--- TODO: DO OR DON'T USE PRIME POWER ?
-
 fq :: Integer -> IO (Integer,Integer)
 fq k = large_prime k
 
 data Token =
   NAME String
-  | MULT [Token] -- Rewrite to list of tokens! (generalize)
+  | MULT [Token]
   | INV Token
   | IDENTITY
   -- deriving Show
@@ -63,7 +55,6 @@ knuth_bendix (MULT l) =
     [] -> IDENTITY
     [x] -> x
     l' -> MULT l'
-  -- Other case should never happen
 
 knuth_bendix (INV (MULT l)) = knuth_bendix $ MULT . map (INV) . reverse $ l
 knuth_bendix (INV (INV a)) = knuth_bendix a
@@ -73,6 +64,7 @@ knuth_bendix (INV (NAME s)) = INV (NAME s)
 knuth_bendix (NAME s) = NAME s
 knuth_bendix IDENTITY = IDENTITY
 
+-- Flatten multiplication
 list_flat_list :: [Token] -> [Token]
 list_flat_list (MULT l : xs) = list_flat_list l ++ list_flat_list xs
 list_flat_list (INV a : xs) = map (INV) (reverse (list_flat_list [a])) ++ list_flat_list xs
@@ -87,6 +79,7 @@ flatten_mult (INV a) = INV (flatten_mult a)
 flatten_mult (NAME s) = NAME s
 flatten_mult IDENTITY = IDENTITY
 
+-- Remove inverse
 remove_x_inv_x a [] = [a]
 remove_x_inv_x (INV a) (b : xs) =
   if token_eq a b
@@ -112,6 +105,7 @@ remove_inverse (MULT l) =
 remove_inverse (INV a) = INV (remove_inverse a)
 remove_inverse a = a
 
+-- Knuth_bendix normal form (fixpoint)
 knuth_bendix_fix x =  
   let kx = knuth_bendix . remove_identity . remove_inverse . remove_identity . flatten_mult . remove_identity $ x in
     if token_eq kx x
@@ -191,12 +185,15 @@ remove_subsection_list x (y : ys) =
     Left x' ->
       remove_subsection_list x' ys
 
+-- Normal form, reduce everything to a normal form (TODO: broken?)
 normal_form :: [Token] -> Token -> Token
 normal_form rel x = 
   let relinv = map INV rel in
     case remove_subsection_list (knuth_bendix_fix x) (map knuth_bendix_fix (rel ++ relinv)) of
       Left y -> knuth_bendix_fix $ y
       Right y -> knuth_bendix_fix $ y
+
+
 
 -- Create representation
 base4 :: Integer -> [Integer]
@@ -239,6 +236,8 @@ sl2_fq_rep (p,q,pq) (su,st,sh2,sh) =
     
   return (([cu,ct,ch2,ch],r),[u,t,h2,h])
 
+
+-- Evaluation
 lookup_in_list :: Token -> [(Token,a)] -> Either String a
 lookup_in_list a ((b,c):rest) =
   if token_eq a b
@@ -253,9 +252,48 @@ evaluate dict pq (INV a) =
 evaluate _ _ IDENTITY = Right identity
 evaluate dict _ (NAME s) = lookup_in_list (NAME s) dict
 evaluate dict pq (MULT l) = 
-  foldl (\b a -> evaluate dict pq a >>= \x ->  b >>= \y -> Right $ matrix_mult pq y x) (Right identity) l
-  -- foldr (\a b -> evaluate dict pq a >>= \x -> b >>= \y ->Right $ matrix_mult pq y x) (Right identity) l
+  -- foldl (\b a -> evaluate dict pq a >>= \x ->  b >>= \y -> Right $ matrix_mult pq y x) (Right identity) l
+  foldr (\a b -> evaluate dict pq a >>= \x -> b >>= \y ->Right $ matrix_mult pq y x) (Right identity) l
 
+-- Random permutation of list
+random_order_aux :: [Token] -> [Token] -> IO [Token]
+random_order_aux [] l' = return l'
+random_order_aux l l' =
+  randomRIO (0 , (length l-1)) >>= \i ->
+  random_order_aux (take i l ++ drop (i+1) l) (l !! i : l')
+
+random_order :: [Token] -> IO [Token]
+random_order l = random_order_aux l []
+  
+-- Create a sample list, and a sample algorithm for uniform sampling over a presentation
+cube :: [Token] -> IO Token
+cube rep =
+  let list_value = rep >>= \x ->
+        return $
+        (randomIO :: IO Bool) >>= \e ->
+        if e
+        then return $ x
+        else return $ IDENTITY
+  in
+    (sequence list_value) >>= \l ->
+    random_order l >>= \l' ->
+    return $ MULT (filter (not . token_eq IDENTITY) l')
+
+create_sample_list_aux :: Int -> ([Token],[Token]) -> IO [[Token]]
+create_sample_list_aux m (rep,sym) | m < length rep = return [rep]
+create_sample_list_aux m (rep,sym) =
+  create_sample_list_aux (m-1) (rep,sym) >>= \sample_lists ->
+  let sl = sample_lists !! (m-length rep) in
+  cube sl >>= \ym ->
+  cube sl >>= \zm ->
+  return ((MULT [INV ym, zm] : sl) : sample_lists)
+
+create_sample_list :: Integer -> ([Token],[Token]) -> IO [Token]
+create_sample_list m (rep,sym) =
+  create_sample_list_aux (fromInteger m) (rep,sym) >>= \sample_lists ->
+  return $ sample_lists !! (fromInteger m-length rep)
+
+-- Solve relation for generator
 move_to_rhs_aux :: String -> Token -> Token -> (Token,Token)
 move_to_rhs_aux s (MULT ((NAME t) : xr)) rhs =
   if t == s
@@ -299,7 +337,16 @@ solve_for_token rel s t =
   if token_eq (normal_form rel rest) (NAME s)
   then normal_form rel $ rhs
   else normal_form rel $ INV rhs
-  
+
+find_solution_for_generator :: [Token] -> String -> [Token] -> Maybe Token
+find_solution_for_generator rel s (h:hs) =
+  let relsubh = filter (not . token_eq h) rel in
+  if solvable [] s h
+  then Just $ solve_for_token [] s h
+  else find_solution_for_generator rel s hs
+find_solution_for_generator _ _ [] = Nothing
+
+-- Replace token by token
 replace_name_by_token :: String -> Token -> Token -> Token
 replace_name_by_token s a (NAME t) =
   if s == t
@@ -313,28 +360,10 @@ replace_name_by_token s a (IDENTITY) = IDENTITY
 
 replace_token_by_token :: Token -> Token -> Token -> Token
 replace_token_by_token (NAME t) a b = replace_name_by_token t a b
-  
-find_solution_for_generator :: [Token] -> String -> [Token] -> Maybe Token
-find_solution_for_generator rel s (h:hs) =
-  let relsubh = filter (not . token_eq h) rel in
-  if solvable [] s h
-  then Just $ solve_for_token [] s h
-  else find_solution_for_generator rel s hs
-find_solution_for_generator _ _ [] = Nothing
 
--- TODO: This is the current bottleneck!
--- TODO: Tail recursion
--- TODO: Solve for all equalities (on the right side) / Dynamic!
 find_solution_for_generator_token :: Token -> [Token] -> Maybe Token
 find_solution_for_generator_token (NAME s) rel = find_solution_for_generator rel s rel
 find_solution_for_generator_token _ _ = Nothing
-
-data Trace =
-    ADD_GENERATOR Token Token
-  | REMOVE_GENERATOR Token Token
-  | ADD_RELATION Token
-  | REMOVE_RELATION Token
-  deriving Show
 
 -- Assumption knuth_bendix normal form
 remove_relation :: [Token] -> [Token] -> Maybe (Token,[Token])
@@ -350,8 +379,15 @@ remove_relation (x : rel') rel =
       then Just (x',relsubx)
       else Nothing
 
--- Representation by strings:
--- TODO: FIX REP 0 and REP 3
+-- Data structure for Trace of Tietze transformation
+data Trace =
+    ADD_GENERATOR Token Token
+  | REMOVE_GENERATOR Token Token
+  | ADD_RELATION Token
+  | REMOVE_RELATION Token
+  deriving Show
+
+-- Tietze transformations
 rep_by_index :: Integer -> ([Token],[Token]) -> IO Token -> Integer -> [Trace] -> IO (Maybe (([Token],[Token]),[Trace]))
 rep_by_index 0 (rep,sym) sample_algorithm counter rev_trace =
   sample_algorithm >>= \a ->
@@ -366,21 +402,18 @@ rep_by_index 1 (rep,sym) _ _ rev_trace =
       let sym' = map (knuth_bendix_fix . replace_token_by_token gen sol) sym in
         Just $ ((rep',sym'), REMOVE_GENERATOR gen sol : rev_trace)
 rep_by_index 2 (rep,sym) sample_algorithm _ rev_trace =
-  sequence ([0..10] >>= \_ -> return $
-          randomRIO (0,length sym - 1) >>= \i ->
-          (randomIO :: IO Bool) >>= \b ->
-            return $
-            if b
-            then (sym !! i)
-            else IDENTITY) >>= \l ->
-  let rel = knuth_bendix_fix $ MULT l in
+  (random_order sym >>= cube . (take 3)) >>= \l -> -- Size here should vary!
+  let rel = knuth_bendix_fix l in
   let sym' = rel : sym in
-  return $ Just $ ((rep,sym'), ADD_RELATION rel : rev_trace)
-rep_by_index 3 (rep,sym) sample_algorithm _ rev_trace =
+    return $ Just $ ((rep,sym'), ADD_RELATION rel : rev_trace)
+rep_by_index 3 (rep,sym) sample_algorithm counter rev_trace =
   do
     putStrLn $ " Length: " ++ show (length sym)
-    return $ remove_relation sym sym >>= \(rel,sym') -> Just ((rep,sym'), REMOVE_RELATION rel : rev_trace)  
+    randomRIO (0,length sym-1) >>= \i ->
+      return $ remove_relation [sym !! i] sym >>= \(rel,sym') ->
+      Just ((rep,sym'), REMOVE_RELATION rel : rev_trace)  
 
+-- Do random Tietze transformations
 rep_randomizer :: ([Token],[Token]) -> IO Token -> Integer -> [Trace] -> [Integer] -> IO (([Token],[Token]),[Trace])
 rep_randomizer (rep,sym) sample_algorithm counter rev_trace ban =
   randomRIO (0,3) >>= \r ->
@@ -395,81 +428,6 @@ rep_randomizer (rep,sym) sample_algorithm counter rev_trace ban =
       _ ->
         rep_randomizer (rep,sym) sample_algorithm counter rev_trace ban
 
-find_token_index t [] = -1
-find_token_index t (h : rep) =
-  if token_eq t h
-  then 0
-  else find_token_index t rep + 1
-
-calculate_value_from_rev_trace :: [Trace] -> ([Token],[Token]) -> Token -> Token
-calculate_value_from_rev_trace [] _ value = value
-calculate_value_from_rev_trace (ADD_GENERATOR gen sol : rev_trace) (rep,sym) value =
-  let sym' = map (replace_token_by_token gen sol) sym in
-  let index = find_token_index gen rep in
-  let rep' = (take index rep ++ drop (index+1) rep) in
-  calculate_value_from_rev_trace rev_trace (rep',sym') (replace_token_by_token gen sol value)    
-calculate_value_from_rev_trace (REMOVE_GENERATOR a b : rev_trace) (rep,sym) value =
-  calculate_value_from_rev_trace rev_trace (a : rep, b : sym) (value)
-calculate_value_from_rev_trace (ADD_RELATION rel : trace) (rep,sym) value =
-  calculate_value_from_rev_trace trace (rep,filter (not . token_eq rel) sym) value
-calculate_value_from_rev_trace (REMOVE_RELATION rel : trace) (rep,sym) value =
-  calculate_value_from_rev_trace trace (rep,rel : sym) value
-
-calculate_value_from_trace :: [Trace] -> ([Token],[Token]) -> Token -> Token
-calculate_value_from_trace [] _ value = value
-calculate_value_from_trace (ADD_GENERATOR a b : trace) (rep,sym) value =
-  calculate_value_from_trace trace (a : rep, b : sym) (value)
-calculate_value_from_trace (REMOVE_GENERATOR gen sol : trace) (rep,sym) value =
-  let sym' = map (replace_token_by_token gen sol) sym in
-  let index = find_token_index gen rep in
-  let rep' = (take index rep ++ drop (index+1) rep) in
-  calculate_value_from_trace trace (rep',sym') (replace_token_by_token gen sol value)    
-calculate_value_from_trace (ADD_RELATION rel : trace) (rep,sym) value =
-  calculate_value_from_trace trace (rep,rel : sym) value
-calculate_value_from_trace (REMOVE_RELATION rel : trace) (rep,sym) value =
-  calculate_value_from_trace trace (rep,filter (not . token_eq rel) sym) value
-
-random_order_aux :: [Token] -> [Token] -> IO [Token]
-random_order_aux [] l' = return l'
-random_order_aux l l' =
-  randomRIO (0 , (length l-1)) >>= \i ->
-  random_order_aux (take i l ++ drop (i+1) l) (l !! i : l')
-
-random_order :: [Token] -> IO [Token]
-random_order l = random_order_aux l []
-  
--- Sample random element using a representation: // TODO: is this correct sampling?
-cube :: [Token] -> IO Token
-cube rep =
-  let list_value = rep >>= \x ->
-        return $
-        (randomIO :: IO Bool) >>= \e ->
-        if e
-        then return $ x
-        else return $ IDENTITY
-  in
-    (sequence list_value) >>= \l ->
-    random_order l >>= \l' ->
-    return $ MULT (filter (not . token_eq IDENTITY) l')
-
-create_sample_list_aux :: Int -> ([Token],[Token]) -> IO [[Token]]
-create_sample_list_aux m (rep,sym) | m < length rep = return [rep]
-create_sample_list_aux m (rep,sym) =
-  create_sample_list_aux (m-1) (rep,sym) >>= \sample_lists ->
-  let sl = sample_lists !! (m-length rep) in
-  cube sl >>= \ym ->
-  cube sl >>= \zm ->
-  return ((MULT [INV ym, zm] : sl) : sample_lists)
-
-create_sample_list :: Integer -> ([Token],[Token]) -> IO [Token]
-create_sample_list m (rep,sym) =
-  create_sample_list_aux (fromInteger m) (rep,sym) >>= \sample_lists ->
-  return $ sample_lists !! (fromInteger m-length rep)
-
-apply_n_times :: Integer -> (a -> IO a) -> IO a -> IO a
-apply_n_times 0 f v = v
-apply_n_times n f v = apply_n_times (n-1) f v >>= f
-
 random_tietze_aux :: ([Token],[Token]) -> ([Trace] -> IO Token) -> [Trace] -> Integer -> Integer -> IO (([Token],[Token]),[Trace])
 random_tietze_aux rep _ rev_trace _ 0 = return (rep,rev_trace)
 random_tietze_aux rep sample rev_trace counter i =
@@ -483,9 +441,8 @@ random_tietze rep sample i =
     putStrLn "Start of Tietze obfuscation"
     random_tietze_aux rep sample [] 0 i
 
---- A generator can only be removed if it is redundant, meaning that it can be expressed by
---- other generators, by a redundant relation.
 
+-- Reduce group structure by removing generators and relations.
 reduce_group_representation_generators_aux :: ([Token],[Token]) -> [Trace] -> IO (([Token],[Token]),[Trace])
 reduce_group_representation_generators_aux ([],rel) rev_trace = return (([],rel),rev_trace)
 reduce_group_representation_generators_aux (g : gen,rel) rev_trace =
@@ -522,3 +479,41 @@ reduce_group_representation (rep,rev_trace) =
   do
     putStrLn "Start of reduction"
     reduce_group_representation_generators rep rev_trace >>= removing_relation_fix
+
+-- lookup algorithm
+find_token_index t [] = -1
+find_token_index t (h : rep) =
+  if token_eq t h
+  then 0
+  else find_token_index t rep + 1
+
+-- Calculate isomorphism and its inverse from (rev_)trace.
+calculate_value_from_rev_trace :: [Trace] -> ([Token],[Token]) -> Token -> Token
+calculate_value_from_rev_trace [] _ value = value
+calculate_value_from_rev_trace (ADD_GENERATOR gen sol : rev_trace) (rep,sym) value =
+  let sym' = map (replace_token_by_token gen sol) sym in
+  let index = find_token_index gen rep in
+  let rep' = (take index rep ++ drop (index+1) rep) in
+  calculate_value_from_rev_trace rev_trace (rep',sym') (replace_token_by_token gen sol value)    
+calculate_value_from_rev_trace (REMOVE_GENERATOR a b : rev_trace) (rep,sym) value =
+  calculate_value_from_rev_trace rev_trace (a : rep, b : sym) (value)
+calculate_value_from_rev_trace (ADD_RELATION rel : trace) (rep,sym) value =
+  calculate_value_from_rev_trace trace (rep,filter (not . token_eq rel) sym) value
+calculate_value_from_rev_trace (REMOVE_RELATION rel : trace) (rep,sym) value =
+  calculate_value_from_rev_trace trace (rep,rel : sym) value
+
+-- Inverse isomorphism
+calculate_value_from_trace :: [Trace] -> ([Token],[Token]) -> Token -> Token
+calculate_value_from_trace [] _ value = value
+calculate_value_from_trace (ADD_GENERATOR a b : trace) (rep,sym) value =
+  calculate_value_from_trace trace (a : rep, b : sym) (value)
+calculate_value_from_trace (REMOVE_GENERATOR gen sol : trace) (rep,sym) value =
+  let sym' = map (replace_token_by_token gen sol) sym in
+  let index = find_token_index gen rep in
+  let rep' = (take index rep ++ drop (index+1) rep) in
+  calculate_value_from_trace trace (rep',sym') (replace_token_by_token gen sol value)    
+calculate_value_from_trace (ADD_RELATION rel : trace) (rep,sym) value =
+  calculate_value_from_trace trace (rep,rel : sym) value
+calculate_value_from_trace (REMOVE_RELATION rel : trace) (rep,sym) value =
+  calculate_value_from_trace trace (rep,filter (not . token_eq rel) sym) value
+
