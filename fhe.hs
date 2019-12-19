@@ -18,11 +18,11 @@ token_commutator a b =  MULT [a , b , INV a , INV b]
 token_and_operation :: IO Token -> (Token,Token) -> (Token,Token) -> IO (Token,Token)
 token_and_operation sample (a1,a2) (b1,b2) =
   sample >>= \z ->
-  return (token_commutator (MULT [z , a1 , INV z]) b1,
-          token_commutator (MULT [z , a2 , INV z]) b2)
+  return (knuth_bendix_fix $ token_commutator (MULT [z , a1 , INV z]) b1,
+          knuth_bendix_fix $ token_commutator (MULT [z , a2 , INV z]) b2)
 
 token_not_operation :: (Token,Token) -> (Token,Token)
-token_not_operation (a1,a2) = (MULT [INV a1 , a2], a2)
+token_not_operation (a1,a2) = (knuth_bendix_fix $ MULT [INV a1 , a2], a2)
 
    ---------------------------
    -- Encoding and Decoding --
@@ -40,12 +40,12 @@ encode sample_G sample_K True =
   
 decode :: (Token -> Either String Bool) -> (Token -> Either String [[Integer]]) -> (Token,Token) -> Either String Bool
 decode ker pi_eval (h,t) =
-  (ker h) >>= \b ->
+  (ker (knuth_bendix_fix h)) >>= \b ->
   if b
   then Right False
   else 
-    pi_eval t >>= \pt ->
-    pi_eval h >>= \ph ->
+    pi_eval (knuth_bendix_fix t) >>= \pt ->
+    pi_eval (knuth_bendix_fix h) >>= \ph ->
     if ph == pt
     then Right True
     else Left $ show ph ++ " vs " ++ show pt

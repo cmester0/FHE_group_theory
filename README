@@ -2,4 +2,4 @@ Run the makefile with:
     make
 to compile the haskell code, it will automatically run after make. Otherwise it the code can be executed by running the compiled "Code" file, that is
    ./examples
-It will take a while, and then it will run some tests (EncodeDecode,AND,NOT,Complex) and then it will run the blood type test, where it will propt you for blood types for X and Y. The blood type should be given by letters O A B or AB, and a + or -.
+It will prompt you for a security parameter (number of bits), a too large value will take a very long time, choosing values < 60 are recomended. It then runs some tests (EncodeDecode,AND,NOT,Complex) and then it will run the blood type test, where it will propt you for blood types for X and Y. The blood type should be given by letters O A B or AB, and a + or -.

@@ -6,7 +6,6 @@ import Data.List
 import System.Random
 import Control.Monad
 
-
   ------------
   --- TESTS --
   ------------
@@ -129,25 +128,30 @@ complex_computation ((enc),(and_op,not_op),(dec)) =
   enc True >>= \one ->
   enc False >>= \zero ->
   call_recursively 10 (and_op one) one >>= \val ->
-  putStrLn $ "Dec(1 /\\ 1 /\\ 1 /\\ ...): " ++ show (dec val)
+  do
+    putStrLn "Decrypting"
+    putStrLn $ "Dec(1 /\\ 1 /\\ 1 /\\ ...): " ++ show (dec val)
 
 -- Main
 main =
-  let k = 128 in
-    construct_FHE k >>= \scheme ->
-    do
-      putStrLn "EncodeDecode"
-      testEncodeDecode scheme
-      putStrLn "-------------------------"
-      putStrLn "NOT"
-      testEncodeNot scheme
-      putStrLn "-------------------------"
-      putStrLn "AND"
-      testEncodeAnd scheme
-      putStrLn "-------------------------"
-      putStrLn "Complex computation (1 /\\ 1 /\\ 1 /\\ ...)"
-      complex_computation scheme
-      putStrLn "-------------------------"
-      putStrLn "Blood Type"
-      blood_type_example scheme
-      putStrLn "-------------------------"
+  do
+    putStrLn "Input security parameter (number of bytes of security): "
+    k <- readLn
+    construct_FHE (k :: Integer) >>= \scheme ->
+      do
+        putStrLn "\n\n-------------------------"
+        putStrLn "EncodeDecode"
+        testEncodeDecode scheme
+        putStrLn "-------------------------"
+        putStrLn "NOT"
+        testEncodeNot scheme
+        putStrLn "-------------------------"
+        putStrLn "AND"
+        testEncodeAnd scheme
+        putStrLn "-------------------------"
+        putStrLn "Blood Type"
+        blood_type_example scheme
+        putStrLn "-------------------------"
+        putStrLn "Complex computation (1 /\\ 1 /\\ 1 /\\ ...)"
+        complex_computation scheme
+        putStrLn "-------------------------"
